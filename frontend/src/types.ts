@@ -7,13 +7,32 @@ export interface Task {
   is_critical: boolean;
 }
 
+export interface LayerConfig {
+  visible: boolean;
+  opacity: number;
+}
+
 export interface ArchitectState {
-  materialMode: 'default' | 'concrete' | 'glass' | 'wood';
+  materialMode: 'default' | 'concrete' | 'glass' | 'wood' | 'wireframe';
   sectionCutEnabled: boolean;
   sectionCutZ: number;
   measuringActive: boolean;
   measureDistance: number | null;
   sunTime: number;
+  
+  // Advanced Simulation Controls
+  simulationSpeed: number;
+  layers: Record<string, LayerConfig>;
+  isolatedLayer: string | null;
+  
+  // Element Material overrides
+  selectedElementId: string | null;
+  elementMaterials: Record<string, string>;
+  
+  // Design Insights
+  designInsights: string[];
+  
+  // UI Selection
   selectedZone: string | null;
   selectedZoneArea: number | null;
   designVariant: 'A' | 'B';
@@ -21,10 +40,17 @@ export interface ArchitectState {
   layerMode: 'all' | 'structure' | 'mep' | 'shadow_study';
 }
 
-export interface ModelElement {
+export interface ParsedModelElement {
   id: string;
   type: string;
+  layer: string;
   position: [number, number, number];
-  dimensions: [number, number, number];
-  task_id: number;
+  size: [number, number, number];
+  rotation: [number, number, number];
+  color: string;
+  room_type?: string;
+}
+
+export interface ParsedModel {
+  elements: ParsedModelElement[];
 }

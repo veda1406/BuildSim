@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { Upload, Play, Layers, LogOut } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import type { Task, ArchitectState } from '../types';
+import type { Task, ArchitectState, ParsedModel } from '../types';
 
 import SimulationCanvas from '../components/core/SimulationCanvas';
 import TimelineSlider from '../components/core/TimelineSlider';
@@ -24,6 +24,18 @@ export default function Dashboard() {
     measuringActive: false,
     measureDistance: null,
     sunTime: 12,
+    simulationSpeed: 1.0,
+    layers: {
+       'structure': { visible: true, opacity: 1 },
+       'walls': { visible: true, opacity: 1 },
+       'floors': { visible: true, opacity: 1 },
+       'mep': { visible: true, opacity: 1 },
+       'facade': { visible: true, opacity: 1 }
+    },
+    isolatedLayer: null,
+    selectedElementId: null,
+    elementMaterials: {},
+    designInsights: [],
     selectedZone: null,
     selectedZoneArea: null,
     designVariant: 'A',
@@ -33,6 +45,8 @@ export default function Dashboard() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadedModel, setUploadedModel] = useState<ParsedModel | null>(null);
+  const [numStories, setNumStories] = useState(4);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -57,6 +71,7 @@ export default function Dashboard() {
     try {
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('num_stories', numStories.toString());
 
       const response = await axios.post('http://127.0.0.1:8000/tasks/upload', formData, {
         headers: {
@@ -67,6 +82,10 @@ export default function Dashboard() {
 
       console.log('Upload successful:', response.data);
       alert(`Successfully uploaded ${file.name}`);
+      
+      if (response.data.model_data) {
+        setUploadedModel(response.data.model_data);
+      }
       
       // Optionally trigger a re-fetch of tasks or plans here if needed
       
@@ -96,6 +115,7 @@ export default function Dashboard() {
   useEffect(() => {
     let interval: any;
     if (isPlaying) {
+      const intervalDelay = 500 / (architectState.simulationSpeed || 1);
       interval = setInterval(() => {
         setCurrentDay((prev) => {
           if (prev >= maxDay) {
@@ -104,10 +124,10 @@ export default function Dashboard() {
           }
           return prev + 1;
         });
-      }, 500);
+      }, intervalDelay);
     }
     return () => clearInterval(interval);
-  }, [isPlaying, maxDay]);
+  }, [isPlaying, maxDay, architectState.simulationSpeed]);
 
   return (
     <div className="w-full h-screen flex flex-col bg-[#0b0c10] text-gray-300 font-sans selection:bg-emerald-500/30">
@@ -135,11 +155,19 @@ export default function Dashboard() {
             accept=".dxf,.ifc"
             className="hidden"
           />
+          <input 
+            type="number"
+            value={numStories}
+            onChange={(e) => setNumStories(parseInt(e.target.value) || 1)}
+            min="1" max="20"
+            className="w-16 px-2 py-1 bg-[#0b0c10] border border-gray-700 rounded text-xs font-bold text-gray-300"
+            title="Number of Floors/Stories"
+          />
           <button 
             onClick={() => fileInputRef.current?.click()}
             disabled={isUploading}
             className="flex items-center gap-2 px-4 py-2 border border-gray-700 hover:border-gray-500 rounded text-xs font-bold tracking-wider transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-            <Upload className="w-4 h-4" /> {isUploading ? 'UPLOADING...' : 'UPLOAD PLAN (DXF/IFC)'}
+            <Upload className="w-4 h-4" /> {isUploading ? 'UPLOADING...' : 'UPLOAD PLAN'}
           </button>
           <button 
             onClick={() => {
@@ -168,7 +196,13 @@ export default function Dashboard() {
         <main className="flex-1 relative bg-[#0b0c10] flex flex-col items-center justify-center">
           <TimelineSlider maxDay={maxDay} currentDay={currentDay} setCurrentDay={setCurrentDay} />
           <div className="absolute inset-0 z-0">
-             <SimulationCanvas tasks={tasks} currentDay={currentDay} architectState={architectState} setArchitectState={setArchitectState} />
+             <SimulationCanvas 
+               tasks={tasks} 
+               currentDay={currentDay} 
+               architectState={architectState} 
+               setArchitectState={setArchitectState} 
+               uploadedModel={uploadedModel}
+             />
           </div>
         </main>
 
