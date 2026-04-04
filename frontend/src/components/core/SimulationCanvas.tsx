@@ -1,0 +1,273 @@
+import { useState, useEffect, Suspense } from 'react';
+import * as THREE from 'three';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { OrbitControls, Box, PointerLockControls, useTexture } from '@react-three/drei';
+import type { Task, ArchitectState } from '../../types';
+
+interface SimulationCanvasProps {
+  tasks: Task[];
+  currentDay: number;
+  architectState?: ArchitectState;
+  setArchitectState?: React.Dispatch<React.SetStateAction<ArchitectState>>;
+}
+
+const WalkthroughControls = () => {
+  const { camera } = useThree();
+  const [movement, setMovement] = useState({ forward: false, backward: false, left: false, right: false });
+
+  useEffect(() => {
+    // Start slightly above ground
+    camera.position.set(0, 2, 5);
+    camera.lookAt(0, 2, 0);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      switch(e.code) {
+        case 'KeyW': setMovement(m => ({ ...m, forward: true })); break;
+        case 'KeyS': setMovement(m => ({ ...m, backward: true })); break;
+        case 'KeyA': setMovement(m => ({ ...m, left: true })); break;
+        case 'KeyD': setMovement(m => ({ ...m, right: true })); break;
+      }
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      switch(e.code) {
+        case 'KeyW': setMovement(m => ({ ...m, forward: false })); break;
+        case 'KeyS': setMovement(m => ({ ...m, backward: false })); break;
+        case 'KeyA': setMovement(m => ({ ...m, left: false })); break;
+        case 'KeyD': setMovement(m => ({ ...m, right: false })); break;
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [camera]);
+
+  useFrame((_, delta) => {
+    const speed = 5 * delta;
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+    dir.y = 0; // lock to horizontal plane
+    dir.normalize();
+
+    const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
+
+    if (movement.forward) camera.position.addScaledVector(dir, speed);
+    if (movement.backward) camera.position.addScaledVector(dir, -speed);
+    if (movement.right) camera.position.addScaledVector(right, speed);
+    if (movement.left) camera.position.addScaledVector(right, -speed);
+    
+    // Prevent strictly going below ground
+    if (camera.position.y < 0.5) camera.position.y = 0.5;
+  });
+
+  return <PointerLockControls />;
+};
+
+const BuildingBlock = ({ 
+  position, 
+  color, 
+  visible, 
+  opacity,
+  materialMode,
+  clippingPlanes,
+  onClick
+}: any) => {
+  let roughness = 0.5;
+  let metalness = 0.1;
+  let mapColor = color;
+  let transparent = true;
+  let curOpacity = opacity;
+  let textureMap: THREE.Texture | null = null;
+
+  const textures = useTexture({
+    wood: '/textures/wood.png',
+    concrete: '/textures/concrete.png'
+  });
+
+  // Basic material approximations
+  if (materialMode === 'glass') {
+    roughness = 0.1;
+    metalness = 0.2;
+    mapColor = '#88ccff';
+    curOpacity = Math.min(opacity, 0.35);
+  } else if (materialMode === 'concrete') {
+    roughness = 0.9;
+    metalness = 0.1;
+    textureMap = textures.concrete;
+    if (color === '#059669' || color === '#34d399') {
+      mapColor = '#a0a0a0';
+    }
+  } else if (materialMode === 'wood') {
+    roughness = 0.8;
+    metalness = 0.1;
+    textureMap = textures.wood;
+    if (color === '#059669' || color === '#34d399') {
+      mapColor = '#cca47c';
+    }
+  }
+
+  if (textureMap && textureMap.wrapS !== THREE.RepeatWrapping) {
+    textureMap.wrapS = THREE.RepeatWrapping;
+    textureMap.wrapT = THREE.RepeatWrapping;
+    textureMap.repeat.set(3, 1);
+    textureMap.needsUpdate = true;
+  }
+
+  return (
+    <Box position={position} args={[3, 1, 3]} visible={visible} castShadow receiveShadow onPointerDown={(e) => { e.stopPropagation(); onClick(e); }}>
+      <meshStandardMaterial 
+        color={mapColor} 
+        map={textureMap}
+        opacity={curOpacity} 
+        transparent={transparent}
+        roughness={roughness}
+        metalness={metalness}
+        clippingPlanes={clippingPlanes}
+        side={THREE.DoubleSide}
+      />
+    </Box>
+  );
+};
+
+export default function SimulationCanvas({ tasks, currentDay, architectState, setArchitectState }: SimulationCanvasProps) {
+  const [measurePoints, setMeasurePoints] = useState<THREE.Vector3[]>([]);
+
+  // Sun calculations based on time (0-24)
+  const sunTime = architectState?.sunTime ?? 12;
+  const theta = ((sunTime - 6) / 12) * Math.PI; 
+  const sunX = Math.cos(theta) * 20;
+  const sunY = Math.max(Math.sin(theta) * 20, -2);
+  const sunLightIntensity = sunY > 0 ? 1.5 * Math.sin(theta) : 0;
+  // Boost ambient slightly at night so the building isn't completely pitch black
+  const ambientIntensity = sunY > 0 ? 0.3 : 0.15;
+
+  // Section Cut Clipping Plane
+  const clippingPlanes = architectState?.sectionCutEnabled 
+    ? [new THREE.Plane(new THREE.Vector3(0, -1, 0), architectState.sectionCutZ)] 
+    : [];
+
+  const handleBlockClick = (e: any, task: Task) => {
+    if (!architectState || !setArchitectState) return;
+    
+    if (architectState.measuringActive) {
+      const pt = e.point;
+      const newPoints = [...measurePoints, pt];
+      if (newPoints.length === 2) {
+        const dist = newPoints[0].distanceTo(newPoints[1]);
+        setArchitectState(prev => ({ ...prev, measureDistance: dist, measuringActive: false }));
+        setMeasurePoints([]);
+      } else {
+        setMeasurePoints(newPoints);
+      }
+    } else {
+      setArchitectState(prev => ({ 
+        ...prev, 
+        selectedZone: `Zone-${task.id} (${task.name})`, 
+        selectedZoneArea: 9.0 
+      }));
+    }
+  };
+
+  return (
+    <Canvas 
+      shadows
+      camera={{ position: [8, 8, 8], fov: 45 }}
+      gl={{ localClippingEnabled: true }}
+    >
+      <Suspense fallback={null}>
+        <ambientLight intensity={ambientIntensity} color="#a0aec0" />
+        <directionalLight 
+          position={[sunX, sunY, 5]} 
+          intensity={sunLightIntensity} 
+          color="#ffffff" 
+          castShadow 
+          shadow-mapSize-width={2048}
+          shadow-mapSize-height={2048}
+          shadow-camera-far={50}
+          shadow-camera-left={-20}
+          shadow-camera-right={20}
+          shadow-camera-top={20}
+          shadow-camera-bottom={-20}
+          shadow-bias={-0.0005}
+        />
+        
+        {/* Secondary fill light */}
+        {architectState?.layerMode !== 'shadow_study' && (
+          <directionalLight position={[-10, 5, -5]} intensity={sunY > 0 ? 0.2 : 0.1} color="#4ade80" />
+        )}
+        
+        <gridHelper args={[40, 40, 0x333333, 0x1a1a1b]} position={[0, -0.5, 0]} />
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.51, 0]} receiveShadow>
+          <planeGeometry args={[100, 100]} />
+          <shadowMaterial opacity={0.4} />
+        </mesh>
+      
+      {tasks.map((task, index) => {
+         const columns = 2;
+         const row = Math.floor(index / columns);
+         const col = index % columns;
+         
+         let xPos = col * 3.5 - 1.5;
+         
+         // Apply design variant geometric shift
+         if (architectState?.designVariant === 'B') {
+            xPos += (row % 2 === 0 ? 0.5 : -0.5);
+         }
+         
+         const position: [number, number, number] = [xPos, row * 1 + 0.5, 0];
+         let isVisible = currentDay >= task.early_start;
+         let opacity = 0.9;
+
+         // Layer visibility simulation
+         if (architectState?.layerMode === 'mep' && index % 2 !== 0) isVisible = false;
+         if (architectState?.layerMode === 'structure' && index % 2 === 0) opacity = 0.3;
+
+         // Base Color based on timeline schedule
+         let color = '#34d399'; 
+         if (currentDay >= task.early_start && currentDay < task.early_finish) {
+            color = '#fbbf24'; 
+         } else if (task.is_critical) {
+            color = '#10b981'; 
+         } else {
+            color = '#059669'; 
+         }
+         
+         return (
+            <BuildingBlock 
+               key={task.id} 
+               position={position} 
+               color={color} 
+               visible={isVisible}
+               opacity={opacity}
+               materialMode={architectState?.materialMode || 'default'}
+               clippingPlanes={clippingPlanes}
+               onClick={(e: any) => handleBlockClick(e, task)}
+            />
+         );
+      })}
+
+      {measurePoints.map((pt, i) => (
+         <mesh key={i} position={pt}>
+            <sphereGeometry args={[0.2, 16, 16]} />
+            <meshBasicMaterial color="#ef4444" depthTest={false} />
+         </mesh>
+      ))}
+
+      {measurePoints.length === 2 && (
+         <line>
+           <bufferGeometry attach="geometry" {...(new THREE.BufferGeometry().setFromPoints(measurePoints)) as any} />
+           <lineBasicMaterial attach="material" color="#ef4444" linewidth={2} depthTest={false} />
+         </line>
+      )}
+      
+      {architectState?.walkthroughMode ? (
+        <WalkthroughControls />
+      ) : (
+        <OrbitControls makeDefault maxPolarAngle={Math.PI / 2 - 0.05} enableDamping dampingFactor={0.05} />
+      )}
+      </Suspense>
+    </Canvas>
+  );
+}
