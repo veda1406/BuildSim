@@ -14,20 +14,39 @@ def create_task(task: schemas.TaskCreate, db: Session = Depends(get_db), current
     db.refresh(db_task)
     return db_task
 
+import os
+import parsers
+
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+
 @router.post("/upload")
-def upload_plan(file: UploadFile = File(...), current_user: models.User = Depends(auth_utils.get_current_user)):
+def upload_plan(
+    file: UploadFile = File(...), 
+    num_stories: int = Form(4),
+    current_user: models.User = Depends(auth_utils.get_current_user)
+):
     # Validate file extension
     valid_extensions = [".dxf", ".ifc"]
     if not any(file.filename.lower().endswith(ext) for ext in valid_extensions):
         raise HTTPException(status_code=400, detail="Invalid file type. Only .dxf and .ifc permitted.")
     
-    # Normally we would save it to a cloud bucket or local /uploads dir and trigger a parsing job
-    # For now, we simulate success
+    # Save file temporarily to parse it
+    temp_filepath = f"temp_{file.filename}"
+    with open(temp_filepath, "wb") as f:
+        f.write(file.file.read())
+        
+    try:
+        model_data = parsers.parse_file(temp_filepath, file.filename, num_stories=num_stories)
+    finally:
+        if os.path.exists(temp_filepath):
+            os.remove(temp_filepath)
+            
     return {
         "filename": file.filename, 
-        "message": "File successfully uploaded and queued for processing.",
-        "size": file.size or "Unknown"
+        "message": "File successfully parsed.",
+        "model_data": model_data
     }
+
 
 @router.post("/dependency/", response_model=schemas.DependencyCreate)
 def create_dependency(dep: schemas.DependencyCreate, db: Session = Depends(get_db), current_user: models.User = Depends(auth_utils.get_current_user)):
