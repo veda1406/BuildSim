@@ -105,12 +105,38 @@ def parse_dxf_procedural(filepath, num_stories=4):
             "color": "#cbd5e1"
         })
 
-        # Add Walls
+        # Add Walls and gather points for Columns
+        points = set()
         for l in normalized_lines:
             # avoid tiny lines
             dist = math.hypot(l[2]-l[0], l[3]-l[1])
             if dist < 0.1: continue
             building_elements.append(calculate_wall(l[0], l[1], l[2], l[3], floor_height, base_y))
+            points.add((round(l[0], 2), round(l[1], 2)))
+            points.add((round(l[2], 2), round(l[3], 2)))
+            
+        # Add Columns at intersections
+        for px, pz in points:
+            building_elements.append({
+                "id": str(uuid.uuid4()),
+                "type": "column",
+                "layer": "structure",
+                "position": [px, base_y + floor_height / 2.0, -pz],
+                "size": [0.3, floor_height, 0.3],
+                "rotation": [0, 0, 0],
+                "color": "#475569"
+            })
+            
+        # Add a simple corridor MEP duct through the center
+        building_elements.append({
+            "id": str(uuid.uuid4()),
+            "type": "duct",
+            "layer": "mep",
+            "position": [0, base_y + floor_height - 0.4, 0],
+            "size": [slab_width * 0.8, 0.3, 0.3],
+            "rotation": [0, 0, 0],
+            "color": "#a1a1aa"
+        })
             
         # Add a central core for aesthetics (Stairs/Elevator block placeholder)
         if story == 0:
@@ -199,6 +225,34 @@ def generate_apartment_layout(num_stories=4):
                 "color": color,
                 "room_type": rtype
             })
+
+        # Columns
+        corners = [
+            [-5.9, -4.9], [5.9, -4.9], [-5.9, 4.9], [5.9, 4.9]
+        ]
+        for cx, cz in corners:
+            elements.append({
+                "id": str(uuid.uuid4()),
+                "type": "column",
+                "layer": "structure",
+                "position": [cx, base_y + 1.5, cz],
+                "size": [0.4, 3.0, 0.4],
+                "rotation": [0,0,0],
+                "color": "#475569",
+                "room_type": "column"
+            })
+            
+        # Corridor MEP Duct
+        elements.append({
+            "id": str(uuid.uuid4()),
+            "type": "duct",
+            "layer": "mep",
+            "position": [-1.0, base_y + 2.6, 0],
+            "size": [0.4, 0.4, 9.8],
+            "rotation": [0,0,0],
+            "color": "#94a3b8",
+            "room_type": "mep_duct"
+        })
 
         # Generate Lift Shaft and Cabin
         # Lift is located around x=2.0, z=2.0

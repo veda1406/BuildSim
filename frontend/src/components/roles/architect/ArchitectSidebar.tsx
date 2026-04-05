@@ -4,9 +4,10 @@ import type { ArchitectState } from '../../../types';
 interface ArchitectSidebarProps {
   architectState: ArchitectState;
   setArchitectState: React.Dispatch<React.SetStateAction<ArchitectState>>;
+  hasModel?: boolean;
 }
 
-export default function ArchitectSidebar({ architectState, setArchitectState }: ArchitectSidebarProps) {
+export default function ArchitectSidebar({ architectState, setArchitectState, hasModel }: ArchitectSidebarProps) {
   const updateState = (updates: Partial<ArchitectState>) => {
     setArchitectState(prev => ({ ...prev, ...updates }));
   };
@@ -172,33 +173,37 @@ export default function ArchitectSidebar({ architectState, setArchitectState }: 
        </div>
 
        {/* Design Variant */}
-       <div className="w-full bg-[#161921] border border-gray-800 p-5 rounded-xl shadow-lg flex flex-col gap-4">
-         <span className="text-[0.6rem] text-gray-500 tracking-widest uppercase font-bold block">Design Variant</span>
-         <div className="flex gap-2">
-           {['A', 'B'].map(variant => (
-             <button
-               key={variant}
-               onClick={() => updateState({ designVariant: variant as any })}
-               className={`flex-1 py-2 rounded text-xs font-bold transition-colors border ${architectState.designVariant === variant ? 'bg-amber-500/20 border-amber-500/50 text-amber-400' : 'bg-[#1a1d24] border-gray-700 text-gray-400'}`}
-             >
-               OPTION {variant}
-             </button>
-           ))}
+       {!hasModel && (
+         <div className="w-full bg-[#161921] border border-gray-800 p-5 rounded-xl shadow-lg flex flex-col gap-4">
+           <span className="text-[0.6rem] text-gray-500 tracking-widest uppercase font-bold block">Design Variant</span>
+           <div className="flex gap-2">
+             {['A', 'B'].map(variant => (
+               <button
+                 key={variant}
+                 onClick={() => updateState({ designVariant: variant as any })}
+                 className={`flex-1 py-2 rounded text-xs font-bold transition-colors border ${architectState.designVariant === variant ? 'bg-amber-500/20 border-amber-500/50 text-amber-400' : 'bg-[#1a1d24] border-gray-700 text-gray-400'}`}
+               >
+                 OPTION {variant}
+               </button>
+             ))}
+           </div>
          </div>
-       </div>
+       )}
 
        {/* Walkthrough Mode */}
-       <div className="w-full bg-[#161921] border border-gray-800 p-5 rounded-xl shadow-lg flex flex-col gap-4">
-         <span className="text-[0.6rem] text-gray-500 tracking-widest uppercase font-bold block">Presentation</span>
-         <button
-           onClick={() => updateState({ walkthroughMode: !architectState.walkthroughMode })}
-           className={`py-2 flex justify-center items-center gap-2 rounded text-xs font-bold transition-colors border ${architectState.walkthroughMode ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-400' : 'bg-[#1a1d24] border-gray-700 text-gray-400'}`}
-         >
-           <Camera className="w-4 h-4" /> 
-           {architectState.walkthroughMode ? 'EXIT WALKTHROUGH' : 'ENTER WALKTHROUGH'}
-         </button>
-         {architectState.walkthroughMode && <span className="text-[0.6rem] text-indigo-400 text-center">Use WASD to move, esc to unlock.</span>}
-       </div>
+       {hasModel && (
+         <div className="w-full bg-[#161921] border border-gray-800 p-5 rounded-xl shadow-lg flex flex-col gap-4">
+           <span className="text-[0.6rem] text-gray-500 tracking-widest uppercase font-bold block">Presentation</span>
+           <button
+             onClick={() => updateState({ walkthroughMode: !architectState.walkthroughMode })}
+             className={`py-2 flex justify-center items-center gap-2 rounded text-xs font-bold transition-colors border ${architectState.walkthroughMode ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-400' : 'bg-[#1a1d24] border-gray-700 text-gray-400'}`}
+           >
+             <Camera className="w-4 h-4" /> 
+             {architectState.walkthroughMode ? 'EXIT WALKTHROUGH' : 'ENTER WALKTHROUGH'}
+           </button>
+           {architectState.walkthroughMode && <span className="text-[0.6rem] text-indigo-400 text-center">Use WASD to move, esc to unlock.</span>}
+         </div>
+       )}
 
        {/* Design Insights Box */}
        <div className="w-full bg-[#161921] border border-gray-800 p-5 rounded-xl shadow-lg flex flex-col gap-3">
@@ -207,11 +212,30 @@ export default function ArchitectSidebar({ architectState, setArchitectState }: 
          </span>
          
          {architectState.designInsights && architectState.designInsights.length > 0 ? (
-           architectState.designInsights.map((insight, idx) => (
-             <div key={idx} className="flex justify-between items-center bg-gray-800/50 p-2 rounded border-l-2 border-amber-500">
-               <span className="text-[0.6rem] text-gray-300 leading-tight">{insight}</span>
-             </div>
-           ))
+           architectState.designInsights.map((insight, idx) => {
+             const match = insight.match(/^\[(LOW|MEDIUM|HIGH)\]\s*(.*)/);
+             const severity = match ? match[1] : 'INFO';
+             const text = match ? match[2] : insight;
+             const colors = {
+               'INFO': 'border-blue-500',
+               'LOW': 'border-emerald-500',
+               'MEDIUM': 'border-amber-500',
+               'HIGH': 'border-red-500'
+             };
+             const badgeColors = {
+               'INFO': 'bg-blue-500/20 text-blue-300',
+               'LOW': 'bg-emerald-500/20 text-emerald-300',
+               'MEDIUM': 'bg-amber-500/20 text-amber-300',
+               'HIGH': 'bg-red-500/20 text-red-300'
+             };
+             
+             return (
+               <div key={idx} className={`flex flex-col gap-1 bg-gray-800/50 p-2 rounded border-l-2 ${colors[severity as keyof typeof colors]}`}>
+                 <span className={`text-[0.55rem] font-bold px-1.5 py-0.5 rounded w-max ${badgeColors[severity as keyof typeof badgeColors]}`}>{severity} SEVERITY</span>
+                 <span className="text-[0.6rem] text-gray-300 leading-tight">{text.trim()}</span>
+               </div>
+             )
+           })
          ) : (
            <span className="text-[0.65rem] text-gray-500 italic">Analyzing structural parameters...</span>
          )}

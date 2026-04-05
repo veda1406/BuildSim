@@ -206,7 +206,7 @@ export default function Dashboard() {
           </div>
         </main>
 
-        {user?.role === 'Architect' && <ArchitectSidebar architectState={architectState} setArchitectState={setArchitectState} />}
+        {user?.role === 'Architect' && <ArchitectSidebar architectState={architectState} setArchitectState={setArchitectState} hasModel={!!uploadedModel} />}
         {user?.role === 'Civil Engineer' && <CivilSidebar tasks={tasks} />}
         {user?.role === 'Project Manager' && <ManagerSidebar currentDay={currentDay} />}
 

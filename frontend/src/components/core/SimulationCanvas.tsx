@@ -1,4 +1,4 @@
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, useRef } from 'react';
 import * as THREE from 'three';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Box, PointerLockControls, useTexture } from '@react-three/drei';
@@ -136,20 +136,56 @@ const BuildingBlock = ({
     textureMap.needsUpdate = true;
   }
 
+  const groupRef = useRef<THREE.Group>(null);
+  const shouldAnimate = ['wall', 'slab', 'column', 'stair', 'core'].includes(elType?.toLowerCase() || 'wall');
+
+  useEffect(() => {
+    if (!visible && groupRef.current) {
+       groupRef.current.scale.set(1, 0.001, 1);
+    }
+  }, [visible]);
+
+  useFrame((_, delta) => {
+    if (visible && shouldAnimate && groupRef.current) {
+       groupRef.current.scale.lerp(new THREE.Vector3(1, 1, 1), 8 * delta);
+    } else if (visible && groupRef.current) {
+       groupRef.current.scale.set(1, 1, 1);
+    }
+  });
+
   return (
-    <Box position={position} args={size || [3, 1, 3]} rotation={rotation || [0, 0, 0]} visible={visible} castShadow receiveShadow onPointerDown={(e) => { e.stopPropagation(); onClick(e); }}>
-      <meshStandardMaterial 
-        color={mapColor} 
-        map={textureMap}
-        opacity={curOpacity} 
-        transparent={transparent}
-        roughness={roughness}
-        metalness={metalness}
-        clippingPlanes={clippingPlanes}
-        side={THREE.DoubleSide}
-        wireframe={wireframe}
-      />
-    </Box>
+    <group ref={groupRef} visible={visible}>
+      <Box position={position} args={size || [3, 1, 3]} rotation={rotation || [0, 0, 0]} castShadow receiveShadow onPointerDown={(e) => { e.stopPropagation(); onClick(e); }}>
+        {materialMode === 'glass' ? (
+          <meshPhysicalMaterial 
+            color={mapColor} 
+            map={textureMap}
+            transparent={true}
+            opacity={curOpacity}
+            roughness={0.1}
+            metalness={0.2}
+            transmission={0.9}
+            ior={1.5}
+            thickness={0.5}
+            clippingPlanes={clippingPlanes}
+            side={THREE.DoubleSide}
+            wireframe={wireframe}
+          />
+        ) : (
+          <meshStandardMaterial 
+            color={mapColor} 
+            map={textureMap}
+            opacity={curOpacity} 
+            transparent={transparent}
+            roughness={roughness}
+            metalness={metalness}
+            clippingPlanes={clippingPlanes}
+            side={THREE.DoubleSide}
+            wireframe={wireframe}
+          />
+        )}
+      </Box>
+    </group>
   );
 };
 
@@ -188,9 +224,9 @@ export default function SimulationCanvas({ tasks, currentDay, architectState, se
          }
        }
        
-       if (smallRooms > 0) insights.push(`Warning: ${smallRooms} tight spatial clearances detected (Area < 8sqm).`);
-       if (clashCount > 5) insights.push(`Analysis: High geometric clash density detected (${clashCount} overlaps) within model.`);
-       insights.push("Natural light analysis complete: Core daylight exposure is nominal.");
+       if (smallRooms > 0) insights.push(`[MEDIUM] Warning: ${smallRooms} tight spatial clearances detected (Area < 8sqm).`);
+       if (clashCount > 5) insights.push(`[HIGH] Analysis: High geometric clash density detected (${clashCount} overlaps) within model.`);
+       insights.push("[LOW] Natural light analysis complete: Core daylight exposure is nominal.");
        
        setArchitectState(prev => ({ ...prev, designInsights: insights }));
     }
@@ -265,10 +301,17 @@ export default function SimulationCanvas({ tasks, currentDay, architectState, se
           <shadowMaterial opacity={0.4} />
         </mesh>
       
-      {uploadedModel ? (
-        uploadedModel.elements.map((el, index) => {
-          const maxD = tasks.length > 0 ? Math.max(...tasks.map(t => t.early_finish)) : 10;
-          const appearDay = (index / uploadedModel.elements.length) * maxD;
+      {uploadedModel ? (() => {
+        const maxD = tasks.length > 0 ? Math.max(...tasks.map(t => t.early_finish)) : 10;
+        const maxFloor = Math.max(...uploadedModel.elements.map(e => Math.floor((e.position[1] || 0) / 3.0)), 0);
+        const maxStages = (maxFloor + 1) * 5;
+
+        return uploadedModel.elements.map((el, index) => {
+          const floorIndex = Math.floor((el.position[1] || 0) / 3.0);
+          const layerWeights: Record<string, number> = { 'structure': 0, 'floors': 1, 'walls': 2, 'facade': 3, 'mep': 4 };
+          const layerWeight = layerWeights[el.layer || 'walls'] ?? 5;
+          const stageIndex = floorIndex * 5 + layerWeight;
+          const appearDay = (stageIndex / maxStages) * maxD;
           
           let isVisible = currentDay >= appearDay;
           let opacity = 0.9;
@@ -310,8 +353,8 @@ export default function SimulationCanvas({ tasks, currentDay, architectState, se
                 onClick={(e: any) => handleBlockClick(e, el.id || String(index))}
              />
           );
-        })
-      ) : (
+        });
+      })() : (
       tasks.map((task, index) => {
          const columns = 2;
          const row = Math.floor(index / columns);
