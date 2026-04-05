@@ -1,0 +1,15 @@
+ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION(('ViewDefinition [CoordinationView]'),'2;1');
+FILE_NAME('','2026-04-05T18:22:31',(''),(''),'IfcOpenShell 0.8.0','IfcOpenShell 0.8.0','');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCOWNERHISTORY($,$,$,$,$,$,$,$);
+#2=IFCPROJECT('6a7dd749-d945-4351-af08-7b4b5e8bd034',$,'Sample Project',$,$,$,$,$,$);
+#3=IFCSITE('e53916ce-b1b2-4c58-95f3-2d0c7560c336',$,'Sample Site',$,$,$,$,$,$,$,$,$,$,$);
+#4=IFCBUILDING('05fba257-35af-4a68-ab89-47ef10c1dd79',$,'Sample Building',$,$,$,$,$,$,$,$,$);
+#5=IFCBUILDINGSTOREY('a8bfcea4-b0f8-46f6-b1a8-976822133874',$,'Ground Floor',$,$,$,$,$,$,$);
+#6=IFCWALL('02182e67-4868-4e01-8c73-dba0e98720d1',$,'Test Wall',$,$,$,$,$,$);
+ENDSEC;
+END-ISO-10303-21;
