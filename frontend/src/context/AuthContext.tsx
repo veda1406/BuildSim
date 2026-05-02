@@ -28,7 +28,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     if (token) {
       // Validate token on load
-      fetch("http://127.0.0.1:8000/auth/me", {
+      fetch("http://localhost:8000/auth/me", {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then(async (res) => {

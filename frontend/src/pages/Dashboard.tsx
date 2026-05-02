@@ -73,7 +73,7 @@ export default function Dashboard() {
       formData.append('file', file);
       formData.append('num_stories', numStories.toString());
 
-      const response = await axios.post('http://127.0.0.1:8000/tasks/upload', formData, {
+      const response = await axios.post('http://localhost:8000/tasks/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
           Authorization: `Bearer ${token}`
@@ -101,7 +101,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!token) return;
-    axios.get('http://127.0.0.1:8000/tasks/', { headers: { Authorization: `Bearer ${token}` } })
+    axios.get('http://localhost:8000/tasks/', { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => {
         setTasks(res.data);
         if (res.data.length > 0) {
