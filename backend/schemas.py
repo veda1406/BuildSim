@@ -23,6 +23,30 @@ class UserResponse(UserBase):
     class Config:
         from_attributes = True
 
+class ProjectBase(BaseModel):
+    name: str
+    area: int
+    floors: int
+    cost_rate: int
+    floor_multiplier: int
+    estimated_budget: Optional[float] = None
+    final_budget: Optional[float] = None
+    is_overridden: bool = False
+    total_days: int
+
+class ProjectCreate(ProjectBase):
+    pass
+
+class ProjectResponse(ProjectBase):
+    id: int
+
+    class Config:
+        from_attributes = True
+
+class ProjectUpdateBudget(BaseModel):
+    final_budget: float
+    is_overridden: bool = True
+
 class TaskBase(BaseModel):
     name: str
     duration: int

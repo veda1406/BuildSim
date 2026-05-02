@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { Upload, Play, Layers, LogOut } from 'lucide-react';
+import { Upload, Play, Pause, RotateCcw, Layers, LogOut } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useSimulation } from '../context/SimulationContext';
 import type { Task, ArchitectState, ParsedModel } from '../types';
 
 import SimulationCanvas from '../components/core/SimulationCanvas';
@@ -10,6 +11,7 @@ import ArchitectSidebar from '../components/roles/architect/ArchitectSidebar';
 import CivilSidebar from '../components/roles/civil/CivilSidebar';
 import PlannerSidebar from '../components/roles/planner/PlannerSidebar';
 import ManagerSidebar from '../components/roles/manager/ManagerSidebar';
+import SpeedToggle from '../components/shared/SpeedToggle';
 
 export default function Dashboard() {
   const { user, token, logout } = useAuth();
@@ -24,7 +26,6 @@ export default function Dashboard() {
     measuringActive: false,
     measureDistance: null,
     sunTime: 12,
-    simulationSpeed: 1.0,
     layers: {
        'structure': { visible: true, opacity: 1 },
        'walls': { visible: true, opacity: 1 },
@@ -47,6 +48,20 @@ export default function Dashboard() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadedModel, setUploadedModel] = useState<ParsedModel | null>(null);
   const [numStories, setNumStories] = useState(4);
+  const activeProjectId = 1; // Hardcoded for single-session
+
+  const fetchTasks = () => {
+    if (!token) return;
+    axios.get('http://127.0.0.1:8000/tasks/', { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => {
+        setTasks(res.data);
+        if (res.data.length > 0) {
+           const maxDuration = Math.max(...res.data.map((t: Task) => t.early_finish));
+           setMaxDay(maxDuration);
+        }
+      })
+      .catch(console.error);
+  };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -72,6 +87,7 @@ export default function Dashboard() {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('num_stories', numStories.toString());
+      formData.append('project_id', activeProjectId.toString());
 
       const response = await axios.post('http://localhost:8000/tasks/upload', formData, {
         headers: {
@@ -86,8 +102,12 @@ export default function Dashboard() {
       if (response.data.model_data) {
         setUploadedModel(response.data.model_data);
       }
+      if (response.data.total_days) {
+        setMaxDay(response.data.total_days);
+      }
       
-      // Optionally trigger a re-fetch of tasks or plans here if needed
+      // Re-fetch tasks after upload to update maxDay and simulation timeline
+      fetchTasks();
       
     } catch (error) {
       console.error('File upload failed:', error);
@@ -101,7 +121,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!token) return;
-    axios.get('http://localhost:8000/tasks/', { headers: { Authorization: `Bearer ${token}` } })
+    axios.get('http://127.0.0.1:8000/tasks/', { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => {
         setTasks(res.data);
         if (res.data.length > 0) {
@@ -112,10 +132,12 @@ export default function Dashboard() {
       .catch(console.error);
   }, [token]);
 
+  const { speedMultiplier } = useSimulation();
+
   useEffect(() => {
     let interval: any;
     if (isPlaying) {
-      const intervalDelay = 500 / (architectState.simulationSpeed || 1);
+      const intervalDelay = 300 / speedMultiplier;
       interval = setInterval(() => {
         setCurrentDay((prev) => {
           if (prev >= maxDay) {
@@ -127,7 +149,7 @@ export default function Dashboard() {
       }, intervalDelay);
     }
     return () => clearInterval(interval);
-  }, [isPlaying, maxDay, architectState.simulationSpeed]);
+  }, [isPlaying, maxDay, speedMultiplier]);
 
   return (
     <div className="w-full h-screen flex flex-col bg-[#0b0c10] text-gray-300 font-sans selection:bg-emerald-500/30">
@@ -163,25 +185,37 @@ export default function Dashboard() {
             className="w-16 px-2 py-1 bg-[#0b0c10] border border-gray-700 rounded text-xs font-bold text-gray-300"
             title="Number of Floors/Stories"
           />
+          <SpeedToggle />
           <button 
             onClick={() => fileInputRef.current?.click()}
             disabled={isUploading}
             className="flex items-center gap-2 px-4 py-2 border border-gray-700 hover:border-gray-500 rounded text-xs font-bold tracking-wider transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
             <Upload className="w-4 h-4" /> {isUploading ? 'UPLOADING...' : 'UPLOAD PLAN'}
           </button>
-          <button 
-            onClick={() => {
-              if (!isPlaying && currentDay >= maxDay) {
+          <div className="flex bg-[#121419] border border-gray-700 rounded overflow-hidden shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+            <button 
+              onClick={() => {
+                if (!isPlaying && currentDay >= maxDay) {
+                  setCurrentDay(0);
+                  setIsPlaying(true);
+                } else {
+                  setIsPlaying(!isPlaying);
+                }
+              }}
+              className="flex items-center gap-2 px-6 py-2 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold tracking-wider transition-colors">
+              {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+              {isPlaying ? 'PAUSE' : 'PLAY'}
+            </button>
+            <button 
+              onClick={() => {
                 setCurrentDay(0);
-                setIsPlaying(true);
-              } else {
-                setIsPlaying(!isPlaying);
-              }
-            }}
-            className="flex items-center gap-2 px-6 py-2 bg-emerald-500 hover:bg-emerald-400 text-black rounded text-xs font-bold tracking-wider transition-colors shadow-[0_0_15px_rgba(16,185,129,0.3)]">
-            <Play className="w-4 h-4" /> {isPlaying ? 'PAUSE' : 'SIMULATE'}
-          </button>
-          <button onClick={logout} className="flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/50 rounded text-xs font-bold tracking-wider transition-colors ml-4">
+                setIsPlaying(false);
+              }}
+              className="flex items-center gap-2 px-4 py-2 hover:bg-gray-800 text-gray-300 text-xs font-bold tracking-wider transition-colors border-l border-gray-700">
+              <RotateCcw className="w-4 h-4" /> RESET
+            </button>
+          </div>
+          <button onClick={() => logout()} className="flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/50 rounded text-xs font-bold tracking-wider transition-colors ml-4">
             <LogOut className="w-4 h-4" /> LOGOUT
           </button>
         </div>
@@ -202,13 +236,14 @@ export default function Dashboard() {
                architectState={architectState} 
                setArchitectState={setArchitectState} 
                uploadedModel={uploadedModel}
+               maxDay={maxDay}
              />
           </div>
         </main>
 
         {user?.role === 'Architect' && <ArchitectSidebar architectState={architectState} setArchitectState={setArchitectState} hasModel={!!uploadedModel} />}
         {user?.role === 'Civil Engineer' && <CivilSidebar tasks={tasks} />}
-        {user?.role === 'Project Manager' && <ManagerSidebar currentDay={currentDay} />}
+        {user?.role === 'Project Manager' && <ManagerSidebar currentDay={currentDay} activeProjectId={activeProjectId} triggerRefresh={uploadedModel} />}
 
       </div>
     </div>
