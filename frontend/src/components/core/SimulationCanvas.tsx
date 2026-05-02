@@ -10,6 +10,7 @@ interface SimulationCanvasProps {
   architectState?: ArchitectState;
   setArchitectState?: React.Dispatch<React.SetStateAction<ArchitectState>>;
   uploadedModel?: ParsedModel | null;
+  maxDay: number;
 }
 
 const WalkthroughControls = () => {
@@ -77,7 +78,8 @@ const BuildingBlock = ({
   elType,
   clippingPlanes,
   onClick,
-  isSelected
+  isSelected,
+  scaleY = 1
 }: any) => {
   let roughness = 0.5;
   let metalness = 0.1;
@@ -136,26 +138,22 @@ const BuildingBlock = ({
     textureMap.needsUpdate = true;
   }
 
-  const groupRef = useRef<THREE.Group>(null);
-  const shouldAnimate = ['wall', 'slab', 'column', 'stair', 'core'].includes(elType?.toLowerCase() || 'wall');
+  // Force full construction if scaleY is 1
+  const finalScaleY = Math.max(0.001, Math.min(scaleY, 1));
+  const finalVisible = visible && finalScaleY > 0.01;
 
-  useEffect(() => {
-    if (!visible && groupRef.current) {
-       groupRef.current.scale.set(1, 0.001, 1);
-    }
-  }, [visible]);
-
-  useFrame((_, delta) => {
-    if (visible && shouldAnimate && groupRef.current) {
-       groupRef.current.scale.lerp(new THREE.Vector3(1, 1, 1), 8 * delta);
-    } else if (visible && groupRef.current) {
-       groupRef.current.scale.set(1, 1, 1);
-    }
-  });
+  // Calculate base position (original position is center)
+  const height = size?.[1] || 1;
+  const basePosition: [number, number, number] = [
+    position[0],
+    position[1] - height / 2,
+    position[2]
+  ];
 
   return (
-    <group ref={groupRef} visible={visible}>
-      <Box position={position} args={size || [3, 1, 3]} rotation={rotation || [0, 0, 0]} castShadow receiveShadow onPointerDown={(e) => { e.stopPropagation(); onClick(e); }}>
+    <group position={basePosition} rotation={rotation || [0, 0, 0]} visible={finalVisible} scale={[1, finalScaleY, 1]}>
+      {/* Offset box so its bottom is at [0,0,0] relative to group */}
+      <Box position={[0, height / 2, 0]} args={size || [3, 1, 3]} castShadow receiveShadow onPointerDown={(e) => { e.stopPropagation(); onClick(e); }}>
         {materialMode === 'glass' ? (
           <meshPhysicalMaterial 
             color={mapColor} 
@@ -189,7 +187,7 @@ const BuildingBlock = ({
   );
 };
 
-export default function SimulationCanvas({ tasks, currentDay, architectState, setArchitectState, uploadedModel }: SimulationCanvasProps) {
+export default function SimulationCanvas({ tasks, currentDay, architectState, setArchitectState, uploadedModel, maxDay }: SimulationCanvasProps) {
   const [measurePoints, setMeasurePoints] = useState<THREE.Vector3[]>([]);
 
   // Design Insights Effect
@@ -302,36 +300,64 @@ export default function SimulationCanvas({ tasks, currentDay, architectState, se
         </mesh>
       
       {uploadedModel ? (() => {
-        const maxD = tasks.length > 0 ? Math.max(...tasks.map(t => t.early_finish)) : 10;
+        const totalSimDays = maxDay || 100;
+        const globalProgress = Math.min(Math.max(currentDay / totalSimDays, 0), 1);
         const maxFloor = Math.max(...uploadedModel.elements.map(e => Math.floor((e.position[1] || 0) / 3.0)), 0);
-        const maxStages = (maxFloor + 1) * 5;
-
+        
         return uploadedModel.elements.map((el, index) => {
           const floorIndex = Math.floor((el.position[1] || 0) / 3.0);
-          const layerWeights: Record<string, number> = { 'structure': 0, 'floors': 1, 'walls': 2, 'facade': 3, 'mep': 4 };
-          const layerWeight = layerWeights[el.layer || 'walls'] ?? 5;
-          const stageIndex = floorIndex * 5 + layerWeight;
-          const appearDay = (stageIndex / maxStages) * maxD;
           
-          let isVisible = currentDay >= appearDay;
-          let opacity = 0.9;
+          // Phase mapping
+          let phaseStart = 0;
+          let phaseEnd = 1;
+          let isFoundation = (el.type === 'slab' && floorIndex === 0);
+          let isStructure = (el.layer === 'structure' || el.type === 'column' || el.type === 'core' || el.layer === 'walls' || el.type === 'wall');
+          let isRoofing = (el.type === 'slab' && floorIndex > 0);
+          let isFinishing = (el.layer === 'mep' || el.layer === 'facade' || el.type === 'stair' || el.type === 'lift' || el.type === 'duct');
+
+          if (isFoundation) {
+            phaseStart = 0.0;
+            phaseEnd = 0.25;
+          } else if (isStructure) {
+            // Structure is staggered by floor within its phase (25-60%)
+            const floorStep = 0.35 / (maxFloor + 1);
+            phaseStart = 0.25 + (floorIndex * floorStep);
+            phaseEnd = phaseStart + floorStep;
+          } else if (isRoofing) {
+            phaseStart = 0.60;
+            phaseEnd = 0.85;
+          } else if (isFinishing) {
+            phaseStart = 0.85;
+            phaseEnd = 1.0;
+          }
+
+          // Calculate element progress
+          let elementProgress = 0;
+          if (globalProgress >= 1.0) {
+            elementProgress = 1.0;
+          } else if (globalProgress >= phaseEnd) {
+            elementProgress = 1.0;
+          } else if (globalProgress >= phaseStart) {
+            elementProgress = (globalProgress - phaseStart) / (phaseEnd - phaseStart);
+          }
           
+          elementProgress = Math.min(Math.max(elementProgress, 0), 1);
+
+          let isVisible = globalProgress >= phaseStart;
+          let scaleY = elementProgress;
+          
+          // Layer visibility checks
           if (architectState?.layers) {
             const elLayer = el.layer || 'walls';
             const config = architectState.layers[elLayer] || { visible: true, opacity: 1.0 };
-            
             if (!config.visible) isVisible = false;
-            
-            if (architectState.isolatedLayer && architectState.isolatedLayer !== elLayer) {
-               isVisible = false;
-            }
-            
-            opacity = config.opacity;
+            if (architectState.isolatedLayer && architectState.isolatedLayer !== elLayer) isVisible = false;
           }
 
+          // Construction Color Logic
           let color = el.color;
-          if (currentDay >= appearDay && currentDay <= appearDay + (maxD * 0.1)) {
-             color = '#fbbf24'; 
+          if (elementProgress > 0 && elementProgress < 1.0) {
+             color = '#fbbf24'; // Construction Yellow
           }
           
           const matMode = architectState?.elementMaterials?.[el.id!] || architectState?.materialMode || 'default';
@@ -345,11 +371,12 @@ export default function SimulationCanvas({ tasks, currentDay, architectState, se
                 rotation={el.rotation}
                 color={color}
                 visible={isVisible}
-                opacity={opacity}
+                opacity={architectState?.layers?.[el.layer!]?.opacity || 1.0}
                 materialMode={matMode}
                 elType={el.type}
                 clippingPlanes={clippingPlanes}
                 isSelected={isSelected}
+                scaleY={scaleY}
                 onClick={(e: any) => handleBlockClick(e, el.id || String(index))}
              />
           );

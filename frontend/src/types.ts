@@ -21,7 +21,7 @@ export interface ArchitectState {
   sunTime: number;
   
   // Advanced Simulation Controls
-  simulationSpeed: number;
+  simulationSpeed?: number;
   layers: Record<string, LayerConfig>;
   isolatedLayer: string | null;
   

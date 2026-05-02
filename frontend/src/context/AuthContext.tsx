@@ -10,52 +10,91 @@ interface User {
 interface AuthContextType {
   token: string | null;
   user: User | null;
+  isValidating: boolean;
+  sessionExpired: boolean;
   login: (token: string, userData: User) => void;
-  logout: () => void;
+  logout: (expired?: boolean) => void;
+  clearSessionExpired: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
   token: null,
   user: null,
+  isValidating: true,
+  sessionExpired: false,
   login: () => {},
   logout: () => {},
+  clearSessionExpired: () => {},
 });
+
+function getStoredUser(): User | null {
+  try {
+    const raw = localStorage.getItem("user");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [token, setToken] = useState<string | null>(localStorage.getItem("token"));
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(getStoredUser());
+  const [isValidating, setIsValidating] = useState(true);
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   useEffect(() => {
-    if (token) {
-      // Validate token on load
-      fetch("http://127.0.0.1:8000/auth/me", {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then(async (res) => {
-          if (!res.ok) throw new Error("Token invalid");
-          const data = await res.json();
-          setUser(data);
-        })
-        .catch(() => {
-          logout();
-        });
+    if (!token) {
+      setIsValidating(false);
+      return;
     }
+
+    // Validate token with backend; user data is pre-loaded from localStorage
+    // so the page renders immediately while this runs in the background.
+    fetch("http://127.0.0.1:8000/auth/me", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          // Token is invalid or expired → session expired
+          const hadUser = !!localStorage.getItem("user");
+          logout(hadUser);
+          return;
+        }
+        const data = await res.json();
+        setUser(data);
+        localStorage.setItem("user", JSON.stringify(data));
+      })
+      .catch(() => {
+        // Network error – keep the user logged in with cached data;
+        // don't force logout on backend being temporarily down.
+        console.warn("BuildSim: Could not reach backend to validate token. Using cached session.");
+      })
+      .finally(() => {
+        setIsValidating(false);
+      });
   }, [token]);
 
   const login = (newToken: string, userData: User) => {
     localStorage.setItem("token", newToken);
+    localStorage.setItem("user", JSON.stringify(userData));
     setToken(newToken);
     setUser(userData);
+    setSessionExpired(false);
+    setIsValidating(false);
   };
 
-  const logout = () => {
+  const logout = (expired = false) => {
     localStorage.removeItem("token");
+    localStorage.removeItem("user");
     setToken(null);
     setUser(null);
+    if (expired) setSessionExpired(true);
   };
 
+  const clearSessionExpired = () => setSessionExpired(false);
+
   return (
-    <AuthContext.Provider value={{ token, user, login, logout }}>
+    <AuthContext.Provider value={{ token, user, isValidating, sessionExpired, login, logout, clearSessionExpired }}>
       {children}
     </AuthContext.Provider>
   );
