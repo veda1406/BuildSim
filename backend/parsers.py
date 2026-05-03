@@ -301,7 +301,30 @@ def parse_dxf_procedural(filepath, num_stories=4):
 
     rooms = detect_rooms(normalized_lines)
 
-    return {"elements": building_elements, "rooms": rooms}
+    # Calculate area and wall length
+    area = (n_max_x - n_min_x) * (n_max_y - n_min_y)
+    total_wall_length = 0
+    for l in normalized_lines:
+        total_wall_length += math.hypot(l[2]-l[0], l[3]-l[1])
+
+    # Dynamic Simulation Duration
+    # totalDays = baseDays + (areaFactor * area) + (floorFactor * floors)
+    total_days = int(60 + (area * 0.1) + (num_stories * 5))
+    total_days = max(30, min(365, total_days)) # Keep between 30 and 365 days
+
+    # Budget Calculation: cost = area * rate + wall_length * factor
+    # rate = 150, factor = 50 (sample values)
+    estimated_budget = (area * 150 * num_stories) + (total_wall_length * 50 * num_stories)
+
+    return {
+        "elements": building_elements,
+        "rooms": rooms,
+        "area": round(area, 2),
+        "wall_length": round(total_wall_length, 2),
+        "estimated_budget": round(estimated_budget, 2),
+        "total_days": total_days,
+        "num_stories": num_stories
+    }
 
 def parse_ifc(filepath, num_stories=4):
     if not IFC_AVAILABLE:

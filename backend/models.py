@@ -12,6 +12,19 @@ class User(Base):
     role = Column(String, default="Project Manager")
     created_at = Column(Integer, default=0)
 
+class Project(Base):
+    __tablename__ = "projects"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)
+    area = Column(Integer, default=25000)
+    floors = Column(Integer, default=12)
+    cost_rate = Column(Integer, default=150)
+    floor_multiplier = Column(Integer, default=50000)
+    estimated_budget = Column(Float, nullable=True)
+    final_budget = Column(Float, nullable=True)
+    is_overridden = Column(Boolean, default=False)
+    total_days = Column(Integer, default=100)
 
 class Task(Base):
     __tablename__ = "tasks"

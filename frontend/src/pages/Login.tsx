@@ -17,7 +17,7 @@ export default function Login() {
       formData.append('username', email);
       formData.append('password', password);
 
-      const res = await fetch('http://127.0.0.1:8000/auth/login', {
+      const res = await fetch('http://localhost:8000/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -31,7 +31,7 @@ export default function Login() {
 
       const data = await res.json();
       
-      const userRes = await fetch('http://127.0.0.1:8000/auth/me', {
+      const userRes = await fetch('http://localhost:8000/auth/me', {
         headers: { Authorization: `Bearer ${data.access_token}` },
       });
       const userData = await userRes.json();
