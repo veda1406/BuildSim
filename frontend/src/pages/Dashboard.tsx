@@ -85,6 +85,11 @@ export default function Dashboard() {
       
       if (response.data.model_data) {
         setUploadedModel(response.data.model_data);
+        const maxFloor = Math.max(...response.data.model_data.elements.map((e: any) => Math.floor((e.position[1] || 0) / 3.0)), 0);
+        const numStories = maxFloor + 1;
+        const totalDuration = 10 + (10 * numStories) + (5 * numStories) + (10 * numStories) + (5 * numStories);
+        setMaxDay(totalDuration);
+        setCurrentDay(0);
       }
       
       // Optionally trigger a re-fetch of tasks or plans here if needed

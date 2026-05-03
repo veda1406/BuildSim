@@ -75,6 +75,7 @@ const BuildingBlock = ({
   opacity,
   materialMode,
   elType,
+  elLayer,
   clippingPlanes,
   onClick,
   isSelected
@@ -92,12 +93,15 @@ const BuildingBlock = ({
     concrete: '/textures/concrete.png'
   });
 
+  const isGlass = materialMode === 'glass' || (elLayer === 'facade' && elType === 'window');
+
   // Basic material approximations
-  if (materialMode === 'glass') {
+  if (isGlass) {
     roughness = 0.1;
     metalness = 0.2;
-    mapColor = '#88ccff';
-    curOpacity = Math.min(opacity, 0.35);
+    mapColor = (elLayer === 'facade' && elType === 'window') ? '#88ccff' : color || '#88ccff';
+    curOpacity = Math.min(opacity, (elLayer === 'facade' && elType === 'window') ? 0.35 : 0.4);
+    transparent = true;
   } else if (elType === 'lift') {
      roughness = 0.1;
      metalness = 0.8;
@@ -155,8 +159,8 @@ const BuildingBlock = ({
 
   return (
     <group ref={groupRef} visible={visible}>
-      <Box position={position} args={size || [3, 1, 3]} rotation={rotation || [0, 0, 0]} castShadow receiveShadow onPointerDown={(e) => { e.stopPropagation(); onClick(e); }}>
-        {materialMode === 'glass' ? (
+      <Box position={position} args={size || [3, 1, 3]} rotation={rotation || [0, 0, 0]} castShadow receiveShadow onPointerDown={(e) => { e.stopPropagation(); onClick(e); }} userData={{ layer: elLayer || 'default' }}>
+        {isGlass ? (
           <meshPhysicalMaterial 
             color={mapColor} 
             map={textureMap}
@@ -196,18 +200,45 @@ export default function SimulationCanvas({ tasks, currentDay, architectState, se
   useEffect(() => {
     if (uploadedModel && setArchitectState) {
        const insights: string[] = [];
-       let smallRooms = 0;
        
-       uploadedModel.elements.forEach((el) => {
-          if (el.room_type === 'washroom' || el.room_type === 'bedroom') {
-            const area = el.size[0] * el.size[2];
-            if (area < 8.0) smallRooms++;
+       // 1. Calculate which elements are currently visible based on the timeline
+       const maxFloor = Math.max(...uploadedModel.elements.map(e => Math.floor((e.position[1] || 0) / 3.0)), 0);
+       const numStories = maxFloor + 1;
+       const foundationDur = 10;
+       const structureDur = 10 * numStories;
+       const floorsDur = 5 * numStories;
+       const wallsDur = 10 * numStories;
+       const facadeDur = 5 * numStories;
+       const stage0Start = 0;
+       const stage1Start = stage0Start + foundationDur;
+       const stage2Start = stage1Start + structureDur;
+       const stage3Start = stage2Start + floorsDur;
+       const stage4Start = stage3Start + wallsDur;
+
+       const visibleElements = uploadedModel.elements.filter(el => {
+          const floorIndex = Math.floor((el.position[1] || 0) / 3.0);
+          const elLayer = el.layer || 'walls';
+          let stageStart = 0;
+          let stageDuration = 10;
+          if (elLayer === 'structure') {
+             if (floorIndex === 0) { stageStart = stage0Start; stageDuration = foundationDur; }
+             else { stageStart = stage1Start; stageDuration = structureDur; }
+          } else if (elLayer === 'floors') {
+             stageStart = stage2Start; stageDuration = floorsDur;
+          } else if (elLayer === 'walls' || elLayer === 'mep') {
+             stageStart = stage3Start; stageDuration = wallsDur;
+          } else if (elLayer === 'facade') {
+             stageStart = stage4Start; stageDuration = facadeDur;
+          } else {
+             stageStart = stage3Start; stageDuration = wallsDur;
           }
+          const floorProgress = maxFloor > 0 ? (floorIndex / maxFloor) : 0;
+          return currentDay >= (stageStart + (stageDuration * floorProgress));
        });
-       
-       // Lightweight BBox Intersection (Simulating clash detection on first 50 elements)
+
+       // 2. Clash Awareness Check (on visible elements)
        let clashCount = 0;
-       const boxes = uploadedModel.elements.map(el => {
+       const boxes = visibleElements.map(el => {
          const m = new THREE.Box3();
          m.setFromCenterAndSize(
            new THREE.Vector3(...el.position),
@@ -216,21 +247,66 @@ export default function SimulationCanvas({ tasks, currentDay, architectState, se
          return m;
        });
 
-       for (let i=0; i<Math.min(boxes.length, 50); i++) {
-         for (let j=i+1; j<Math.min(boxes.length, 50); j++) {
-           if (boxes[i].intersectsBox(boxes[j])) {
+       for (let i = 0; i < boxes.length; i++) {
+         for (let j = i + 1; j < boxes.length; j++) {
+           const b1 = boxes[i].clone().expandByScalar(-0.05); // slight tolerance
+           const b2 = boxes[j].clone().expandByScalar(-0.05);
+           if (b1.intersectsBox(b2)) {
               clashCount++;
            }
          }
        }
        
-       if (smallRooms > 0) insights.push(`[MEDIUM] Warning: ${smallRooms} tight spatial clearances detected (Area < 8sqm).`);
-       if (clashCount > 5) insights.push(`[HIGH] Analysis: High geometric clash density detected (${clashCount} overlaps) within model.`);
-       insights.push("[LOW] Natural light analysis complete: Core daylight exposure is nominal.");
+       if (clashCount > 15) {
+         insights.push(`[HIGH] Clash Awareness: Structural conflicts detected (many visible elements overlap).`);
+       } else {
+         insights.push(`[LOW] Clash Awareness: Minimal or no conflicts detected.`);
+       }
+
+       // 3. Daylight Insight
+       let facadeArea = 0;
+       let roomArea = 0;
+       visibleElements.forEach((el) => {
+          if (el.layer === 'facade') {
+            facadeArea += (el.size[0] * el.size[1]); // length * height
+          } else if (el.layer === 'floors') {
+            roomArea += (el.size[0] * el.size[2]); // width * depth
+          }
+       });
+       
+       const sunTime = architectState?.sunTime ?? 12;
+       const theta = ((sunTime - 6) / 12) * Math.PI; 
+       const sunIntensity = Math.max(Math.sin(theta), 0); // 0 to 1
+       
+       let exposurePercent = 0;
+       if (roomArea > 0) {
+          exposurePercent = (facadeArea / roomArea) * sunIntensity * 100;
+       }
+       
+       if (exposurePercent < 10) {
+          insights.push(`[LOW] Daylight Insight: Low daylight in interior spaces due to lack of facade exposure.`);
+       } else if (exposurePercent <= 25) {
+          insights.push(`[MODERATE] Daylight Insight: Moderate natural light exposure.`);
+       } else {
+          insights.push(`[GOOD] Daylight Insight: Good natural light exposure near facade openings.`);
+       }
+       
+       // 4. Spatial Efficiency
+       let inefficientCount = 0;
+       visibleElements.forEach((el) => {
+          if (el.room_type === 'washroom' || el.room_type === 'bedroom') {
+            const area = el.size[0] * el.size[2];
+            if (area < 10.0) inefficientCount++;
+          }
+       });
+
+       if (inefficientCount > 0) {
+         insights.push(`[MEDIUM] Spatial Efficiency: Some rooms appear too narrow for comfortable use.`);
+       }
        
        setArchitectState(prev => ({ ...prev, designInsights: insights }));
     }
-  }, [uploadedModel, setArchitectState]);
+  }, [uploadedModel, setArchitectState, architectState?.sunTime, currentDay]);
 
   // Sun calculations based on time (0-24)
   const sunTime = architectState?.sunTime ?? 12;
@@ -302,16 +378,74 @@ export default function SimulationCanvas({ tasks, currentDay, architectState, se
         </mesh>
       
       {uploadedModel ? (() => {
-        const maxD = tasks.length > 0 ? Math.max(...tasks.map(t => t.early_finish)) : 10;
         const maxFloor = Math.max(...uploadedModel.elements.map(e => Math.floor((e.position[1] || 0) / 3.0)), 0);
-        const maxStages = (maxFloor + 1) * 5;
+        const numStories = maxFloor + 1;
+
+        const foundationDur = 10;
+        const structureDur = 10 * numStories;
+        const floorsDur = 5 * numStories;
+        const wallsDur = 10 * numStories;
+        const facadeDur = 5 * numStories;
+
+        const stage0Start = 0;
+        const stage1Start = stage0Start + foundationDur;
+        const stage2Start = stage1Start + structureDur;
+        const stage3Start = stage2Start + floorsDur;
+        const stage4Start = stage3Start + wallsDur;
+
+        // Internal mapping for current stage based on elapsed time
+        let currentStage = 'Foundation';
+        let progressPercent = 0;
+        
+        if (currentDay < stage1Start) {
+          currentStage = 'Foundation';
+          progressPercent = (currentDay / foundationDur) * 100;
+        } else if (currentDay < stage2Start) {
+          currentStage = 'Structure';
+          progressPercent = ((currentDay - stage1Start) / structureDur) * 100;
+        } else if (currentDay < stage3Start) {
+          currentStage = 'Floors';
+          progressPercent = ((currentDay - stage2Start) / floorsDur) * 100;
+        } else if (currentDay < stage4Start) {
+          currentStage = 'Walls';
+          progressPercent = ((currentDay - stage3Start) / wallsDur) * 100;
+        } else {
+          currentStage = 'Facade';
+          progressPercent = Math.min(((currentDay - stage4Start) / facadeDur) * 100, 100);
+        }
 
         return uploadedModel.elements.map((el, index) => {
           const floorIndex = Math.floor((el.position[1] || 0) / 3.0);
-          const layerWeights: Record<string, number> = { 'structure': 0, 'floors': 1, 'walls': 2, 'facade': 3, 'mep': 4 };
-          const layerWeight = layerWeights[el.layer || 'walls'] ?? 5;
-          const stageIndex = floorIndex * 5 + layerWeight;
-          const appearDay = (stageIndex / maxStages) * maxD;
+          const elLayer = el.layer || 'walls';
+
+          let stageStart = 0;
+          let stageDuration = 10;
+          
+          if (elLayer === 'structure') {
+             if (floorIndex === 0) {
+               stageStart = stage0Start;
+               stageDuration = foundationDur;
+             } else {
+               stageStart = stage1Start;
+               stageDuration = structureDur;
+             }
+          } else if (elLayer === 'floors') {
+             stageStart = stage2Start;
+             stageDuration = floorsDur;
+          } else if (elLayer === 'walls' || elLayer === 'mep') {
+             stageStart = stage3Start;
+             stageDuration = wallsDur;
+          } else if (elLayer === 'facade') {
+             stageStart = stage4Start;
+             stageDuration = facadeDur;
+          } else {
+             stageStart = stage3Start;
+             stageDuration = wallsDur;
+          }
+
+          // Progressively show elements within their stage window based on floor index
+          const floorProgress = maxFloor > 0 ? (floorIndex / maxFloor) : 0;
+          const appearDay = stageStart + (stageDuration * floorProgress);
           
           let isVisible = currentDay >= appearDay;
           let opacity = 0.9;
@@ -330,7 +464,8 @@ export default function SimulationCanvas({ tasks, currentDay, architectState, se
           }
 
           let color = el.color;
-          if (currentDay >= appearDay && currentDay <= appearDay + (maxD * 0.1)) {
+          // Highlight recently built elements (3 day window)
+          if (currentDay >= appearDay && currentDay <= appearDay + 3) {
              color = '#fbbf24'; 
           }
           
@@ -338,21 +473,22 @@ export default function SimulationCanvas({ tasks, currentDay, architectState, se
           const isSelected = architectState?.selectedElementId === el.id;
 
           return (
-             <BuildingBlock 
-                key={el.id || index}
-                position={el.position}
-                size={el.size}
-                rotation={el.rotation}
-                color={color}
-                visible={isVisible}
-                opacity={opacity}
-                materialMode={matMode}
-                elType={el.type}
-                clippingPlanes={clippingPlanes}
-                isSelected={isSelected}
-                onClick={(e: any) => handleBlockClick(e, el.id || String(index))}
-             />
-          );
+              <BuildingBlock 
+                 key={el.id || index}
+                 position={el.position}
+                 size={el.size}
+                 rotation={el.rotation}
+                 color={color}
+                 visible={isVisible}
+                 opacity={opacity}
+                 materialMode={matMode}
+                 elType={el.type}
+                 elLayer={elLayer}
+                 clippingPlanes={clippingPlanes}
+                 isSelected={isSelected}
+                 onClick={(e: any) => handleBlockClick(e, el.id || String(index))}
+              />
+           );
         });
       })() : (
       tasks.map((task, index) => {

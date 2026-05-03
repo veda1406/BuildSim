@@ -40,6 +40,107 @@ def get_dxf_extents(lines):
     max_y = max(max(L[1], L[3]) for L in lines)
     return min_x, max_x, min_y, max_y
 
+def detect_rooms(lines):
+    x_coords = set()
+    y_coords = set()
+    h_lines = []
+    v_lines = []
+    tol = 0.1
+    
+    for l in lines:
+        x1, y1, x2, y2 = l
+        x1, y1, x2, y2 = round(x1, 2), round(y1, 2), round(x2, 2), round(y2, 2)
+        if abs(x1 - x2) < tol:
+            avg_x = round((x1 + x2) / 2.0, 2)
+            v_lines.append((avg_x, min(y1, y2), max(y1, y2)))
+            x_coords.add(avg_x)
+            y_coords.add(y1)
+            y_coords.add(y2)
+        elif abs(y1 - y2) < tol:
+            avg_y = round((y1 + y2) / 2.0, 2)
+            h_lines.append((avg_y, min(x1, x2), max(x1, x2)))
+            y_coords.add(avg_y)
+            x_coords.add(x1)
+            x_coords.add(x2)
+
+    x_list = sorted(list(x_coords))
+    y_list = sorted(list(y_coords))
+    
+    if len(x_list) < 2 or len(y_list) < 2:
+        return []
+        
+    n = len(x_list) - 1
+    m = len(y_list) - 1
+    
+    def is_blocked_h(i, j):
+        if i < 0 or i >= n: return False
+        x_min, x_max = x_list[i], x_list[i+1]
+        y = y_list[j+1]
+        for hy, hx1, hx2 in h_lines:
+            if abs(hy - y) < tol and hx1 - tol <= x_min and hx2 + tol >= x_max:
+                return True
+        return False
+
+    def is_blocked_v(i, j):
+        if j < 0 or j >= m: return False
+        y_min, y_max = y_list[j], y_list[j+1]
+        x = x_list[i+1]
+        for vx, vy1, vy2 in v_lines:
+            if abs(vx - x) < tol and vy1 - tol <= y_min and vy2 + tol >= y_max:
+                return True
+        return False
+
+    visited = set()
+    rooms = []
+    
+    for i in range(-1, n + 1):
+        for j in range(-1, m + 1):
+            if (i, j) not in visited:
+                comp = []
+                queue = [(i, j)]
+                visited.add((i, j))
+                is_outside = False
+                
+                while queue:
+                    ci, cj = queue.pop(0)
+                    if ci < 0 or ci >= n or cj < 0 or cj >= m:
+                        is_outside = True
+                    else:
+                        comp.append((ci, cj))
+                        
+                    neighbors = []
+                    if cj < m and not is_blocked_h(ci, cj): neighbors.append((ci, cj+1))
+                    if cj > -1 and not is_blocked_h(ci, cj-1): neighbors.append((ci, cj-1))
+                    if ci < n and not is_blocked_v(ci, cj): neighbors.append((ci+1, cj))
+                    if ci > -1 and not is_blocked_v(ci-1, cj): neighbors.append((ci-1, cj))
+                        
+                    for ni, nj in neighbors:
+                        if (ni, nj) not in visited:
+                            visited.add((ni, nj))
+                            queue.append((ni, nj))
+                            
+                if not is_outside and len(comp) > 0:
+                    area = 0
+                    min_x, min_y = float('inf'), float('inf')
+                    max_x, max_y = float('-inf'), float('-inf')
+                    for ci, cj in comp:
+                        cx1, cx2 = x_list[ci], x_list[ci+1]
+                        cy1, cy2 = y_list[cj], y_list[cj+1]
+                        area += (cx2 - cx1) * (cy2 - cy1)
+                        min_x = min(min_x, cx1)
+                        min_y = min(min_y, cy1)
+                        max_x = max(max_x, cx2)
+                        max_y = max(max_y, cy2)
+                        
+                    if area > 2.0:
+                        rooms.append({
+                            "id": str(uuid.uuid4()),
+                            "area": round(area, 2),
+                            "points": [[min_x, min_y], [max_x, min_y], [max_x, max_y], [min_x, max_y]]
+                        })
+                    
+    return rooms
+
 def parse_dxf_procedural(filepath, num_stories=4):
     """
     Parses a DXF file, extracts lines, and procedurally generates a multi-story building.
@@ -49,7 +150,7 @@ def parse_dxf_procedural(filepath, num_stories=4):
         msp = doc.modelspace()
     except Exception as e:
         print(f"Error reading DXF: {e}")
-        return generate_demo_model()
+        return generate_apartment_layout(num_stories)
 
     lines = []
     # simplistic line extraction
@@ -64,7 +165,7 @@ def parse_dxf_procedural(filepath, num_stories=4):
                 lines.append((points[-1][0], points[-1][1], points[0][0], points[0][1]))
 
     if not lines:
-        return generate_demo_model()
+        return generate_apartment_layout(num_stories)
         
     # Translate lines to origin
     min_x, max_x, min_y, max_y = get_dxf_extents(lines)
@@ -151,6 +252,42 @@ def parse_dxf_procedural(filepath, num_stories=4):
                 "color": "#64748b" # Dark slate
             })
 
+        # Add Facade shell around the building (layered)
+        # Slab is slab_width x slab_depth, centered at [0, base_y, 0]
+        f_w = slab_width + 0.2
+        f_d = slab_depth + 0.2
+        f_w_win = slab_width + 0.4 # Window slightly offset outward
+        f_d_win = slab_depth + 0.4
+        
+        f_span_b = [
+            ([0, base_y + 0.4, -f_d/2], [f_w, 0.8, 0.1], [0,0,0], "spandrel", "#94a3b8"),
+            ([0, base_y + 0.4, f_d/2], [f_w, 0.8, 0.1], [0,0,0], "spandrel", "#94a3b8"),
+            ([-f_w/2, base_y + 0.4, 0], [f_d, 0.8, 0.1], [0,math.pi/2,0], "spandrel", "#94a3b8"),
+            ([f_w/2, base_y + 0.4, 0], [f_d, 0.8, 0.1], [0,math.pi/2,0], "spandrel", "#94a3b8"),
+        ]
+        f_win = [
+            ([0, base_y + 1.5, -f_d_win/2], [f_w_win, 1.4, 0.1], [0,0,0], "window", "#88ccff"),
+            ([0, base_y + 1.5, f_d_win/2], [f_w_win, 1.4, 0.1], [0,0,0], "window", "#88ccff"),
+            ([-f_w_win/2, base_y + 1.5, 0], [f_d_win, 1.4, 0.1], [0,math.pi/2,0], "window", "#88ccff"),
+            ([f_w_win/2, base_y + 1.5, 0], [f_d_win, 1.4, 0.1], [0,math.pi/2,0], "window", "#88ccff"),
+        ]
+        f_span_t = [
+            ([0, base_y + 2.6, -f_d/2], [f_w, 0.8, 0.1], [0,0,0], "spandrel", "#94a3b8"),
+            ([0, base_y + 2.6, f_d/2], [f_w, 0.8, 0.1], [0,0,0], "spandrel", "#94a3b8"),
+            ([-f_w/2, base_y + 2.6, 0], [f_d, 0.8, 0.1], [0,math.pi/2,0], "spandrel", "#94a3b8"),
+            ([f_w/2, base_y + 2.6, 0], [f_d, 0.8, 0.1], [0,math.pi/2,0], "spandrel", "#94a3b8"),
+        ]
+        for pos, size, rot, ftype, color in f_span_b + f_win + f_span_t:
+            building_elements.append({
+                "id": str(uuid.uuid4()),
+                "type": ftype,
+                "layer": "facade",
+                "position": pos,
+                "size": size,
+                "rotation": rot,
+                "color": color
+            })
+
     # Add roof slab
     building_elements.append({
         "id": str(uuid.uuid4()),
@@ -162,7 +299,9 @@ def parse_dxf_procedural(filepath, num_stories=4):
         "color": "#cbd5e1"
     })
 
-    return {"elements": building_elements}
+    rooms = detect_rooms(normalized_lines)
+
+    return {"elements": building_elements, "rooms": rooms}
 
 def parse_ifc(filepath, num_stories=4):
     if not IFC_AVAILABLE:
@@ -214,16 +353,49 @@ def generate_apartment_layout(num_stories=4):
         w.append(([0.5, base_y + 1.5, -2.5], [3, 3, 0.2], [0,0,0], "#bfdbfe", "washroom"))
         
         for pos, size, rot, color, rtype in w:
-            layer = "facade" if rtype == "exterior" else "walls"
             elements.append({
                 "id": str(uuid.uuid4()),
                 "type": "wall", 
-                "layer": layer,
+                "layer": "walls",
                 "position": pos, 
                 "size": size, 
                 "rotation": rot, 
                 "color": color,
                 "room_type": rtype
+            })
+
+        # Facade Shell (layered with spandrels and window bands)
+        # Bottom spandrel (Y = 0.4, H = 0.8) offset = 0.1 -> width 12.2 / 10.2
+        f_span_b = [
+            ([0, base_y + 0.4, -5.1], [12.2, 0.8, 0.1], [0,0,0], "spandrel", "#94a3b8"),
+            ([0, base_y + 0.4, 5.1], [12.2, 0.8, 0.1], [0,0,0], "spandrel", "#94a3b8"),
+            ([-6.1, base_y + 0.4, 0], [10.2, 0.8, 0.1], [0,math.pi/2,0], "spandrel", "#94a3b8"),
+            ([6.1, base_y + 0.4, 0], [10.2, 0.8, 0.1], [0,math.pi/2,0], "spandrel", "#94a3b8"),
+        ]
+        # Window band (Y = 1.5, H = 1.4) slightly more offset = 0.2 -> width 12.4 / 10.4
+        f_win = [
+            ([0, base_y + 1.5, -5.2], [12.4, 1.4, 0.1], [0,0,0], "window", "#88ccff"),
+            ([0, base_y + 1.5, 5.2], [12.4, 1.4, 0.1], [0,0,0], "window", "#88ccff"),
+            ([-6.2, base_y + 1.5, 0], [10.4, 1.4, 0.1], [0,math.pi/2,0], "window", "#88ccff"),
+            ([6.2, base_y + 1.5, 0], [10.4, 1.4, 0.1], [0,math.pi/2,0], "window", "#88ccff"),
+        ]
+        # Top spandrel (Y = 2.6, H = 0.8) offset = 0.1 -> width 12.2 / 10.2
+        f_span_t = [
+            ([0, base_y + 2.6, -5.1], [12.2, 0.8, 0.1], [0,0,0], "spandrel", "#94a3b8"),
+            ([0, base_y + 2.6, 5.1], [12.2, 0.8, 0.1], [0,0,0], "spandrel", "#94a3b8"),
+            ([-6.1, base_y + 2.6, 0], [10.2, 0.8, 0.1], [0,math.pi/2,0], "spandrel", "#94a3b8"),
+            ([6.1, base_y + 2.6, 0], [10.2, 0.8, 0.1], [0,math.pi/2,0], "spandrel", "#94a3b8"),
+        ]
+        for pos, size, rot, ftype, color in f_span_b + f_win + f_span_t:
+            elements.append({
+                "id": str(uuid.uuid4()),
+                "type": ftype, 
+                "layer": "facade",
+                "position": pos, 
+                "size": size, 
+                "rotation": rot, 
+                "color": color,
+                "room_type": "facade_panel"
             })
 
         # Columns

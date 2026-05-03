@@ -489,7 +489,7 @@ $SKPOLY
   9
 $TDCREATE
  40
-2461136.763321759
+2461164.522465278
   9
 $TDUCREATE
  40
@@ -497,7 +497,7 @@ $TDUCREATE
   9
 $TDUPDATE
  40
-2461136.763321759
+2461164.522465278
   9
 $TDUUPDATE
  40
@@ -549,7 +549,7 @@ $SPLINESEGS
   9
 $HANDSEED
   5
-44
+5F
   9
 $SURFTAB1
  70
@@ -929,11 +929,11 @@ $PSTYLEMODE
   9
 $FINGERPRINTGUID
   2
-{2CB8CCCA-14D0-4578-9678-47357FE3D3BE}
+{3C401406-F634-43A0-B1E2-6B77F37EB36E}
   9
 $VERSIONGUID
   2
-{85370D51-0DEE-40E9-A060-619E15D20C4D}
+{26B1F12E-1552-429C-B16B-E4C8E7E0CDFE}
   9
 $EXTNAMES
 290
@@ -1323,9 +1323,9 @@ ISM
   0
 CLASS
   1
-LAYOUT
+ACDBPLACEHOLDER
   2
-AcDbLayout
+AcDbPlaceHolder
   3
 ObjectDBX Classes
  90
@@ -1339,9 +1339,9 @@ ObjectDBX Classes
   0
 CLASS
   1
-ACDBPLACEHOLDER
+LAYOUT
   2
-AcDbPlaceHolder
+AcDbLayout
   3
 ObjectDBX Classes
  90
@@ -1611,7 +1611,7 @@ AcDbSymbolTableRecord
 100
 AcDbLayerTableRecord
   2
-WALLS
+walls
  70
 0
  62
@@ -1635,7 +1635,7 @@ AcDbSymbolTableRecord
 100
 AcDbLayerTableRecord
   2
-STRUCTURE
+structure
  70
 0
  62
@@ -1659,7 +1659,7 @@ AcDbSymbolTableRecord
 100
 AcDbLayerTableRecord
   2
-MEP
+mep
  70
 0
  62
@@ -1773,7 +1773,7 @@ ACAD
   0
 APPID
   5
-41
+5C
 330
 3
 100
@@ -1787,7 +1787,7 @@ HATCHBACKGROUNDCOLOR
   0
 APPID
   5
-42
+5D
 330
 3
 100
@@ -2103,7 +2103,7 @@ LINE
 100
 AcDbEntity
   8
-WALLS
+walls
 100
 AcDbLine
  10
@@ -2127,7 +2127,7 @@ LINE
 100
 AcDbEntity
   8
-WALLS
+walls
 100
 AcDbLine
  10
@@ -2151,7 +2151,7 @@ LINE
 100
 AcDbEntity
   8
-WALLS
+walls
 100
 AcDbLine
  10
@@ -2175,7 +2175,7 @@ LINE
 100
 AcDbEntity
   8
-WALLS
+walls
 100
 AcDbLine
  10
@@ -2199,7 +2199,7 @@ LINE
 100
 AcDbEntity
   8
-WALLS
+walls
 100
 AcDbLine
  10
@@ -2223,7 +2223,7 @@ LINE
 100
 AcDbEntity
   8
-WALLS
+walls
 100
 AcDbLine
  10
@@ -2239,7 +2239,7 @@ AcDbLine
  31
 0.0
   0
-POINT
+LINE
   5
 38
 330
@@ -2247,17 +2247,23 @@ POINT
 100
 AcDbEntity
   8
-STRUCTURE
+structure
 100
-AcDbPoint
+AcDbLine
  10
-0.0
+-0.15
  20
-0.0
+-0.15
  30
 0.0
+ 11
+0.15
+ 21
+-0.15
+ 31
+0.0
   0
-POINT
+LINE
   5
 39
 330
@@ -2265,17 +2271,23 @@ POINT
 100
 AcDbEntity
   8
-STRUCTURE
+structure
 100
-AcDbPoint
+AcDbLine
  10
-15.0
+0.15
  20
-0.0
+-0.15
  30
 0.0
+ 11
+0.15
+ 21
+0.15
+ 31
+0.0
   0
-POINT
+LINE
   5
 3A
 330
@@ -2283,17 +2295,23 @@ POINT
 100
 AcDbEntity
   8
-STRUCTURE
+structure
 100
-AcDbPoint
+AcDbLine
  10
-15.0
+0.15
  20
-10.0
+0.15
  30
 0.0
+ 11
+-0.15
+ 21
+0.15
+ 31
+0.0
   0
-POINT
+LINE
   5
 3B
 330
@@ -2301,17 +2319,23 @@ POINT
 100
 AcDbEntity
   8
-STRUCTURE
+structure
 100
-AcDbPoint
+AcDbLine
  10
-0.0
+-0.15
  20
-10.0
+0.15
  30
 0.0
+ 11
+-0.15
+ 21
+-0.15
+ 31
+0.0
   0
-POINT
+LINE
   5
 3C
 330
@@ -2319,17 +2343,23 @@ POINT
 100
 AcDbEntity
   8
-STRUCTURE
+structure
 100
-AcDbPoint
+AcDbLine
  10
-8.0
+14.85
  20
-0.0
+-0.15
  30
 0.0
+ 11
+15.15
+ 21
+-0.15
+ 31
+0.0
   0
-POINT
+LINE
   5
 3D
 330
@@ -2337,17 +2367,23 @@ POINT
 100
 AcDbEntity
   8
-STRUCTURE
+structure
 100
-AcDbPoint
+AcDbLine
  10
-8.0
+15.15
  20
-10.0
+-0.15
  30
 0.0
+ 11
+15.15
+ 21
+0.15
+ 31
+0.0
   0
-POINT
+LINE
   5
 3E
 330
@@ -2355,17 +2391,23 @@ POINT
 100
 AcDbEntity
   8
-STRUCTURE
+structure
 100
-AcDbPoint
+AcDbLine
  10
-8.0
+15.15
  20
-5.0
+0.15
  30
 0.0
+ 11
+14.85
+ 21
+0.15
+ 31
+0.0
   0
-POINT
+LINE
   5
 3F
 330
@@ -2373,14 +2415,20 @@ POINT
 100
 AcDbEntity
   8
-STRUCTURE
+structure
 100
-AcDbPoint
+AcDbLine
  10
-15.0
+14.85
  20
-5.0
+0.15
  30
+0.0
+ 11
+14.85
+ 21
+-0.15
+ 31
 0.0
   0
 LINE
@@ -2391,19 +2439,667 @@ LINE
 100
 AcDbEntity
   8
-MEP
+structure
+100
+AcDbLine
+ 10
+14.85
+ 20
+9.85
+ 30
+0.0
+ 11
+15.15
+ 21
+9.85
+ 31
+0.0
+  0
+LINE
+  5
+41
+330
+17
+100
+AcDbEntity
+  8
+structure
+100
+AcDbLine
+ 10
+15.15
+ 20
+9.85
+ 30
+0.0
+ 11
+15.15
+ 21
+10.15
+ 31
+0.0
+  0
+LINE
+  5
+42
+330
+17
+100
+AcDbEntity
+  8
+structure
+100
+AcDbLine
+ 10
+15.15
+ 20
+10.15
+ 30
+0.0
+ 11
+14.85
+ 21
+10.15
+ 31
+0.0
+  0
+LINE
+  5
+43
+330
+17
+100
+AcDbEntity
+  8
+structure
+100
+AcDbLine
+ 10
+14.85
+ 20
+10.15
+ 30
+0.0
+ 11
+14.85
+ 21
+9.85
+ 31
+0.0
+  0
+LINE
+  5
+44
+330
+17
+100
+AcDbEntity
+  8
+structure
+100
+AcDbLine
+ 10
+-0.15
+ 20
+9.85
+ 30
+0.0
+ 11
+0.15
+ 21
+9.85
+ 31
+0.0
+  0
+LINE
+  5
+45
+330
+17
+100
+AcDbEntity
+  8
+structure
+100
+AcDbLine
+ 10
+0.15
+ 20
+9.85
+ 30
+0.0
+ 11
+0.15
+ 21
+10.15
+ 31
+0.0
+  0
+LINE
+  5
+46
+330
+17
+100
+AcDbEntity
+  8
+structure
+100
+AcDbLine
+ 10
+0.15
+ 20
+10.15
+ 30
+0.0
+ 11
+-0.15
+ 21
+10.15
+ 31
+0.0
+  0
+LINE
+  5
+47
+330
+17
+100
+AcDbEntity
+  8
+structure
+100
+AcDbLine
+ 10
+-0.15
+ 20
+10.15
+ 30
+0.0
+ 11
+-0.15
+ 21
+9.85
+ 31
+0.0
+  0
+LINE
+  5
+48
+330
+17
+100
+AcDbEntity
+  8
+structure
+100
+AcDbLine
+ 10
+7.85
+ 20
+-0.15
+ 30
+0.0
+ 11
+8.15
+ 21
+-0.15
+ 31
+0.0
+  0
+LINE
+  5
+49
+330
+17
+100
+AcDbEntity
+  8
+structure
+100
+AcDbLine
+ 10
+8.15
+ 20
+-0.15
+ 30
+0.0
+ 11
+8.15
+ 21
+0.15
+ 31
+0.0
+  0
+LINE
+  5
+4A
+330
+17
+100
+AcDbEntity
+  8
+structure
+100
+AcDbLine
+ 10
+8.15
+ 20
+0.15
+ 30
+0.0
+ 11
+7.85
+ 21
+0.15
+ 31
+0.0
+  0
+LINE
+  5
+4B
+330
+17
+100
+AcDbEntity
+  8
+structure
+100
+AcDbLine
+ 10
+7.85
+ 20
+0.15
+ 30
+0.0
+ 11
+7.85
+ 21
+-0.15
+ 31
+0.0
+  0
+LINE
+  5
+4C
+330
+17
+100
+AcDbEntity
+  8
+structure
+100
+AcDbLine
+ 10
+7.85
+ 20
+9.85
+ 30
+0.0
+ 11
+8.15
+ 21
+9.85
+ 31
+0.0
+  0
+LINE
+  5
+4D
+330
+17
+100
+AcDbEntity
+  8
+structure
+100
+AcDbLine
+ 10
+8.15
+ 20
+9.85
+ 30
+0.0
+ 11
+8.15
+ 21
+10.15
+ 31
+0.0
+  0
+LINE
+  5
+4E
+330
+17
+100
+AcDbEntity
+  8
+structure
+100
+AcDbLine
+ 10
+8.15
+ 20
+10.15
+ 30
+0.0
+ 11
+7.85
+ 21
+10.15
+ 31
+0.0
+  0
+LINE
+  5
+4F
+330
+17
+100
+AcDbEntity
+  8
+structure
+100
+AcDbLine
+ 10
+7.85
+ 20
+10.15
+ 30
+0.0
+ 11
+7.85
+ 21
+9.85
+ 31
+0.0
+  0
+LINE
+  5
+50
+330
+17
+100
+AcDbEntity
+  8
+structure
+100
+AcDbLine
+ 10
+7.85
+ 20
+4.85
+ 30
+0.0
+ 11
+8.15
+ 21
+4.85
+ 31
+0.0
+  0
+LINE
+  5
+51
+330
+17
+100
+AcDbEntity
+  8
+structure
+100
+AcDbLine
+ 10
+8.15
+ 20
+4.85
+ 30
+0.0
+ 11
+8.15
+ 21
+5.15
+ 31
+0.0
+  0
+LINE
+  5
+52
+330
+17
+100
+AcDbEntity
+  8
+structure
+100
+AcDbLine
+ 10
+8.15
+ 20
+5.15
+ 30
+0.0
+ 11
+7.85
+ 21
+5.15
+ 31
+0.0
+  0
+LINE
+  5
+53
+330
+17
+100
+AcDbEntity
+  8
+structure
+100
+AcDbLine
+ 10
+7.85
+ 20
+5.15
+ 30
+0.0
+ 11
+7.85
+ 21
+4.85
+ 31
+0.0
+  0
+LINE
+  5
+54
+330
+17
+100
+AcDbEntity
+  8
+structure
+100
+AcDbLine
+ 10
+14.85
+ 20
+4.85
+ 30
+0.0
+ 11
+15.15
+ 21
+4.85
+ 31
+0.0
+  0
+LINE
+  5
+55
+330
+17
+100
+AcDbEntity
+  8
+structure
+100
+AcDbLine
+ 10
+15.15
+ 20
+4.85
+ 30
+0.0
+ 11
+15.15
+ 21
+5.15
+ 31
+0.0
+  0
+LINE
+  5
+56
+330
+17
+100
+AcDbEntity
+  8
+structure
+100
+AcDbLine
+ 10
+15.15
+ 20
+5.15
+ 30
+0.0
+ 11
+14.85
+ 21
+5.15
+ 31
+0.0
+  0
+LINE
+  5
+57
+330
+17
+100
+AcDbEntity
+  8
+structure
+100
+AcDbLine
+ 10
+14.85
+ 20
+5.15
+ 30
+0.0
+ 11
+14.85
+ 21
+4.85
+ 31
+0.0
+  0
+LINE
+  5
+58
+330
+17
+100
+AcDbEntity
+  8
+mep
 100
 AcDbLine
  10
 0.5
  20
-4.5
+4.4
  30
 0.0
  11
 14.5
  21
-4.5
+4.4
+ 31
+0.0
+  0
+LINE
+  5
+59
+330
+17
+100
+AcDbEntity
+  8
+mep
+100
+AcDbLine
+ 10
+0.5
+ 20
+4.6
+ 30
+0.0
+ 11
+14.5
+ 21
+4.6
+ 31
+0.0
+  0
+LINE
+  5
+5A
+330
+17
+100
+AcDbEntity
+  8
+mep
+100
+AcDbLine
+ 10
+0.5
+ 20
+4.4
+ 30
+0.0
+ 11
+0.5
+ 21
+4.6
+ 31
+0.0
+  0
+LINE
+  5
+5B
+330
+17
+100
+AcDbEntity
+  8
+mep
+100
+AcDbLine
+ 10
+14.5
+ 20
+4.4
+ 30
+0.0
+ 11
+14.5
+ 21
+4.6
  31
 0.0
   0
@@ -3397,7 +4093,7 @@ CREATED_BY_EZDXF
   3
 WRITTEN_BY_EZDXF
 350
-43
+5E
   0
 DICTIONARYVAR
   5
@@ -3409,11 +4105,11 @@ DictionaryVariables
 280
 0
   1
-1.4.3 @ 2026-04-05T12:49:11.485141+00:00
+1.4.3 @ 2026-05-03T07:02:21.909867+00:00
   0
 DICTIONARYVAR
   5
-43
+5E
 330
 2D
 100
@@ -3421,7 +4117,7 @@ DictionaryVariables
 280
 0
   1
-1.4.3 @ 2026-04-05T12:49:11.488545+00:00
+1.4.3 @ 2026-05-03T07:02:21.913457+00:00
   0
 ENDSEC
   0
