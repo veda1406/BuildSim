@@ -23,6 +23,8 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 def upload_plan(
     file: UploadFile = File(...), 
     num_stories: int = Form(4),
+    project_id: int = Form(None),
+    db: Session = Depends(get_db),
     current_user: models.User = Depends(auth_utils.get_current_user)
 ):
     # Validate file extension
@@ -41,10 +43,33 @@ def upload_plan(
         if os.path.exists(temp_filepath):
             os.remove(temp_filepath)
             
+    # Always target Project 1 for the single-session model
+    target_project_id = 1
+    
+    estimated_budget = model_data.get("estimated_budget", 0)
+    total_days = model_data.get("total_days", 100)
+    area = model_data.get("area", 0)
+    
+    db_project = db.query(models.Project).filter(models.Project.id == target_project_id).first()
+    if db_project:
+        db_project.estimated_budget = estimated_budget
+        db_project.final_budget = estimated_budget 
+        db_project.total_days = total_days
+        db_project.area = area
+        db_project.is_overridden = False
+        db.commit()
+        
+    # Clear previous tasks for a fresh session
+    db.query(models.Task).delete()
+    db.commit()
+
     return {
         "filename": file.filename, 
-        "message": "File successfully parsed.",
-        "model_data": model_data
+        "message": "File successfully parsed and session reset.",
+        "model_data": model_data,
+        "project_id": target_project_id,
+        "estimated_budget": estimated_budget,
+        "total_days": total_days
     }
 
 

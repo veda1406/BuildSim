@@ -1,4 +1,4 @@
-import { Layers, Sun, Moon, Box as BoxIcon, Scissors, Ruler, Camera, BarChart2, Eye, EyeOff, FastForward } from 'lucide-react';
+import { Layers, Box as BoxIcon, Scissors, Ruler, Camera, BarChart2, Eye, EyeOff } from 'lucide-react';
 import type { ArchitectState } from '../../../types';
 
 interface ArchitectSidebarProps {
@@ -19,21 +19,6 @@ export default function ArchitectSidebar({ architectState, setArchitectState, ha
          <Layers className="text-emerald-500 w-5 h-5" />
        </div>
 
-       {/* Simulation Speed Control */}
-       <div className="w-full bg-[#161921] border border-gray-800 p-5 rounded-xl shadow-lg flex flex-col gap-4">
-         <span className="text-[0.6rem] text-gray-500 tracking-widest uppercase font-bold flex items-center gap-2"><FastForward className="w-3 h-3" /> Simulation Speed</span>
-         <div className="flex gap-2">
-           {[0.5, 1, 2, 5].map((speed) => (
-             <button
-               key={speed} 
-               onClick={() => updateState({ simulationSpeed: speed })}
-               className={`flex-1 py-1 rounded text-xs font-bold transition-colors border ${architectState.simulationSpeed === speed ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400' : 'bg-[#1a1d24] border-gray-700 text-gray-400'}`}
-             >
-               {speed}x
-             </button>
-           ))}
-         </div>
-       </div>
 
        {/* Advanced Viewport Layers */}
        <div className="w-full bg-[#161921] border border-gray-800 p-5 rounded-xl shadow-lg flex flex-col gap-4">

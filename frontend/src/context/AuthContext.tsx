@@ -10,20 +10,37 @@ interface User {
 interface AuthContextType {
   token: string | null;
   user: User | null;
+  isValidating: boolean;
+  sessionExpired: boolean;
   login: (token: string, userData: User) => void;
-  logout: () => void;
+  logout: (expired?: boolean) => void;
+  clearSessionExpired: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
   token: null,
   user: null,
+  isValidating: true,
+  sessionExpired: false,
   login: () => {},
   logout: () => {},
+  clearSessionExpired: () => {},
 });
+
+function getStoredUser(): User | null {
+  try {
+    const raw = localStorage.getItem("user");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [token, setToken] = useState<string | null>(localStorage.getItem("token"));
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(getStoredUser());
+  const [isValidating, setIsValidating] = useState(true);
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   useEffect(() => {
     if (token) {
@@ -38,24 +55,36 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         })
         .catch(() => {
           logout();
+        })
+        .finally(() => {
+          setIsValidating(false);
         });
+    } else {
+      setIsValidating(false);
     }
   }, [token]);
 
   const login = (newToken: string, userData: User) => {
     localStorage.setItem("token", newToken);
+    localStorage.setItem("user", JSON.stringify(userData));
     setToken(newToken);
     setUser(userData);
+    setSessionExpired(false);
+    setIsValidating(false);
   };
 
-  const logout = () => {
+  const logout = (expired = false) => {
     localStorage.removeItem("token");
+    localStorage.removeItem("user");
     setToken(null);
     setUser(null);
+    if (expired) setSessionExpired(true);
   };
 
+  const clearSessionExpired = () => setSessionExpired(false);
+
   return (
-    <AuthContext.Provider value={{ token, user, login, logout }}>
+    <AuthContext.Provider value={{ token, user, isValidating, sessionExpired, login, logout, clearSessionExpired }}>
       {children}
     </AuthContext.Provider>
   );

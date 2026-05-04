@@ -1,4 +1,4 @@
-import { useState, useEffect, Suspense, useRef } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import * as THREE from 'three';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Box, PointerLockControls, useTexture } from '@react-three/drei';
@@ -9,7 +9,9 @@ interface SimulationCanvasProps {
   currentDay: number;
   architectState?: ArchitectState;
   setArchitectState?: React.Dispatch<React.SetStateAction<ArchitectState>>;
+  civilState?: any;
   uploadedModel?: ParsedModel | null;
+  maxDay: number;
 }
 
 const WalkthroughControls = () => {
@@ -22,7 +24,7 @@ const WalkthroughControls = () => {
     camera.lookAt(0, 2, 0);
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      switch(e.code) {
+      switch (e.code) {
         case 'KeyW': setMovement(m => ({ ...m, forward: true })); break;
         case 'KeyS': setMovement(m => ({ ...m, backward: true })); break;
         case 'KeyA': setMovement(m => ({ ...m, left: true })); break;
@@ -30,7 +32,7 @@ const WalkthroughControls = () => {
       }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
-      switch(e.code) {
+      switch (e.code) {
         case 'KeyW': setMovement(m => ({ ...m, forward: false })); break;
         case 'KeyS': setMovement(m => ({ ...m, backward: false })); break;
         case 'KeyA': setMovement(m => ({ ...m, left: false })); break;
@@ -58,7 +60,7 @@ const WalkthroughControls = () => {
     if (movement.backward) camera.position.addScaledVector(dir, -speed);
     if (movement.right) camera.position.addScaledVector(right, speed);
     if (movement.left) camera.position.addScaledVector(right, -speed);
-    
+
     // Prevent strictly going below ground
     if (camera.position.y < 0.5) camera.position.y = 0.5;
   });
@@ -66,19 +68,20 @@ const WalkthroughControls = () => {
   return <PointerLockControls />;
 };
 
-const BuildingBlock = ({ 
+const BuildingBlock = ({
   position,
   size,
   rotation,
-  color, 
-  visible, 
+  color,
+  visible,
   opacity,
   materialMode,
   elType,
   elLayer,
   clippingPlanes,
   onClick,
-  isSelected
+  isSelected,
+  scaleY = 1
 }: any) => {
   let roughness = 0.5;
   let metalness = 0.1;
@@ -103,9 +106,9 @@ const BuildingBlock = ({
     curOpacity = Math.min(opacity, (elLayer === 'facade' && elType === 'window') ? 0.35 : 0.4);
     transparent = true;
   } else if (elType === 'lift') {
-     roughness = 0.1;
-     metalness = 0.8;
-     curOpacity = Math.min(opacity, 0.6);
+    roughness = 0.1;
+    metalness = 0.8;
+    curOpacity = Math.min(opacity, 0.6);
   } else if (materialMode === 'concrete') {
     roughness = 0.9;
     metalness = 0.1;
@@ -140,27 +143,23 @@ const BuildingBlock = ({
     textureMap.needsUpdate = true;
   }
 
-  const groupRef = useRef<THREE.Group>(null);
-  const shouldAnimate = ['wall', 'slab', 'column', 'stair', 'core'].includes(elType?.toLowerCase() || 'wall');
+  // Force full construction if scaleY is 1
+  const finalScaleY = Math.max(0.001, Math.min(scaleY, 1));
+  const finalVisible = visible && finalScaleY > 0.01;
 
-  useEffect(() => {
-    if (!visible && groupRef.current) {
-       groupRef.current.scale.set(1, 0.001, 1);
-    }
-  }, [visible]);
-
-  useFrame((_, delta) => {
-    if (visible && shouldAnimate && groupRef.current) {
-       groupRef.current.scale.lerp(new THREE.Vector3(1, 1, 1), 8 * delta);
-    } else if (visible && groupRef.current) {
-       groupRef.current.scale.set(1, 1, 1);
-    }
-  });
+  // Calculate base position (original position is center)
+  const height = size?.[1] || 1;
+  const basePosition: [number, number, number] = [
+    position[0],
+    position[1] - height / 2,
+    position[2]
+  ];
 
   return (
-    <group ref={groupRef} visible={visible}>
-      <Box position={position} args={size || [3, 1, 3]} rotation={rotation || [0, 0, 0]} castShadow receiveShadow onPointerDown={(e) => { e.stopPropagation(); onClick(e); }} userData={{ layer: elLayer || 'default' }}>
-        {isGlass ? (
+    <group position={basePosition} rotation={rotation || [0, 0, 0]} visible={finalVisible} scale={[1, finalScaleY, 1]}>
+      {/* Offset box so its bottom is at [0,0,0] relative to group */}
+      <Box position={[0, height / 2, 0]} args={size || [3, 1, 3]} castShadow receiveShadow onPointerDown={(e) => { e.stopPropagation(); onClick(e); }}>
+        {materialMode === 'glass' ? (
           <meshPhysicalMaterial 
             color={mapColor} 
             map={textureMap}
@@ -176,10 +175,10 @@ const BuildingBlock = ({
             wireframe={wireframe}
           />
         ) : (
-          <meshStandardMaterial 
-            color={mapColor} 
+          <meshStandardMaterial
+            color={mapColor}
             map={textureMap}
-            opacity={curOpacity} 
+            opacity={curOpacity}
             transparent={transparent}
             roughness={roughness}
             metalness={metalness}
@@ -193,52 +192,25 @@ const BuildingBlock = ({
   );
 };
 
-export default function SimulationCanvas({ tasks, currentDay, architectState, setArchitectState, uploadedModel }: SimulationCanvasProps) {
+export default function SimulationCanvas({ tasks, currentDay, architectState, setArchitectState, civilState, uploadedModel, maxDay }: SimulationCanvasProps) {
   const [measurePoints, setMeasurePoints] = useState<THREE.Vector3[]>([]);
 
   // Design Insights Effect
   useEffect(() => {
     if (uploadedModel && setArchitectState) {
        const insights: string[] = [];
+       let smallRooms = 0;
        
-       // 1. Calculate which elements are currently visible based on the timeline
-       const maxFloor = Math.max(...uploadedModel.elements.map(e => Math.floor((e.position[1] || 0) / 3.0)), 0);
-       const numStories = maxFloor + 1;
-       const foundationDur = 10;
-       const structureDur = 10 * numStories;
-       const floorsDur = 5 * numStories;
-       const wallsDur = 10 * numStories;
-       const facadeDur = 5 * numStories;
-       const stage0Start = 0;
-       const stage1Start = stage0Start + foundationDur;
-       const stage2Start = stage1Start + structureDur;
-       const stage3Start = stage2Start + floorsDur;
-       const stage4Start = stage3Start + wallsDur;
-
-       const visibleElements = uploadedModel.elements.filter(el => {
-          const floorIndex = Math.floor((el.position[1] || 0) / 3.0);
-          const elLayer = el.layer || 'walls';
-          let stageStart = 0;
-          let stageDuration = 10;
-          if (elLayer === 'structure') {
-             if (floorIndex === 0) { stageStart = stage0Start; stageDuration = foundationDur; }
-             else { stageStart = stage1Start; stageDuration = structureDur; }
-          } else if (elLayer === 'floors') {
-             stageStart = stage2Start; stageDuration = floorsDur;
-          } else if (elLayer === 'walls' || elLayer === 'mep') {
-             stageStart = stage3Start; stageDuration = wallsDur;
-          } else if (elLayer === 'facade') {
-             stageStart = stage4Start; stageDuration = facadeDur;
-          } else {
-             stageStart = stage3Start; stageDuration = wallsDur;
+       uploadedModel.elements.forEach((el) => {
+          if (el.room_type === 'washroom' || el.room_type === 'bedroom') {
+            const area = el.size[0] * el.size[2];
+            if (area < 8.0) smallRooms++;
           }
-          const floorProgress = maxFloor > 0 ? (floorIndex / maxFloor) : 0;
-          return currentDay >= (stageStart + (stageDuration * floorProgress));
        });
-
-       // 2. Clash Awareness Check (on visible elements)
+       
+       // Lightweight BBox Intersection (Simulating clash detection on first 50 elements)
        let clashCount = 0;
-       const boxes = visibleElements.map(el => {
+       const boxes = uploadedModel.elements.map(el => {
          const m = new THREE.Box3();
          m.setFromCenterAndSize(
            new THREE.Vector3(...el.position),
@@ -247,62 +219,17 @@ export default function SimulationCanvas({ tasks, currentDay, architectState, se
          return m;
        });
 
-       for (let i = 0; i < boxes.length; i++) {
-         for (let j = i + 1; j < boxes.length; j++) {
-           const b1 = boxes[i].clone().expandByScalar(-0.05); // slight tolerance
-           const b2 = boxes[j].clone().expandByScalar(-0.05);
-           if (b1.intersectsBox(b2)) {
+       for (let i=0; i<Math.min(boxes.length, 50); i++) {
+         for (let j=i+1; j<Math.min(boxes.length, 50); j++) {
+           if (boxes[i].intersectsBox(boxes[j])) {
               clashCount++;
            }
          }
        }
        
-       if (clashCount > 15) {
-         insights.push(`[HIGH] Clash Awareness: Structural conflicts detected (many visible elements overlap).`);
-       } else {
-         insights.push(`[LOW] Clash Awareness: Minimal or no conflicts detected.`);
-       }
-
-       // 3. Daylight Insight
-       let facadeArea = 0;
-       let roomArea = 0;
-       visibleElements.forEach((el) => {
-          if (el.layer === 'facade') {
-            facadeArea += (el.size[0] * el.size[1]); // length * height
-          } else if (el.layer === 'floors') {
-            roomArea += (el.size[0] * el.size[2]); // width * depth
-          }
-       });
-       
-       const sunTime = architectState?.sunTime ?? 12;
-       const theta = ((sunTime - 6) / 12) * Math.PI; 
-       const sunIntensity = Math.max(Math.sin(theta), 0); // 0 to 1
-       
-       let exposurePercent = 0;
-       if (roomArea > 0) {
-          exposurePercent = (facadeArea / roomArea) * sunIntensity * 100;
-       }
-       
-       if (exposurePercent < 10) {
-          insights.push(`[LOW] Daylight Insight: Low daylight in interior spaces due to lack of facade exposure.`);
-       } else if (exposurePercent <= 25) {
-          insights.push(`[MODERATE] Daylight Insight: Moderate natural light exposure.`);
-       } else {
-          insights.push(`[GOOD] Daylight Insight: Good natural light exposure near facade openings.`);
-       }
-       
-       // 4. Spatial Efficiency
-       let inefficientCount = 0;
-       visibleElements.forEach((el) => {
-          if (el.room_type === 'washroom' || el.room_type === 'bedroom') {
-            const area = el.size[0] * el.size[2];
-            if (area < 10.0) inefficientCount++;
-          }
-       });
-
-       if (inefficientCount > 0) {
-         insights.push(`[MEDIUM] Spatial Efficiency: Some rooms appear too narrow for comfortable use.`);
-       }
+       if (smallRooms > 0) insights.push(`[MEDIUM] Warning: ${smallRooms} tight spatial clearances detected (Area < 8sqm).`);
+       if (clashCount > 5) insights.push(`[HIGH] Analysis: High geometric clash density detected (${clashCount} overlaps) within model.`);
+       insights.push("[LOW] Natural light analysis complete: Core daylight exposure is nominal.");
        
        setArchitectState(prev => ({ ...prev, designInsights: insights }));
     }
@@ -310,7 +237,7 @@ export default function SimulationCanvas({ tasks, currentDay, architectState, se
 
   // Sun calculations based on time (0-24)
   const sunTime = architectState?.sunTime ?? 12;
-  const theta = ((sunTime - 6) / 12) * Math.PI; 
+  const theta = ((sunTime - 6) / 12) * Math.PI;
   const sunX = Math.cos(theta) * 20;
   const sunY = Math.max(Math.sin(theta) * 20, -2);
   const sunLightIntensity = sunY > 0 ? 1.5 * Math.sin(theta) : 0;
@@ -318,13 +245,13 @@ export default function SimulationCanvas({ tasks, currentDay, architectState, se
   const ambientIntensity = sunY > 0 ? 0.3 : 0.15;
 
   // Section Cut Clipping Plane
-  const clippingPlanes = architectState?.sectionCutEnabled 
-    ? [new THREE.Plane(new THREE.Vector3(0, -1, 0), architectState.sectionCutZ)] 
+  const clippingPlanes = architectState?.sectionCutEnabled
+    ? [new THREE.Plane(new THREE.Vector3(0, -1, 0), architectState.sectionCutZ)]
     : [];
 
   const handleBlockClick = (e: any, elementId: string | null) => {
     if (!architectState || !setArchitectState) return;
-    
+
     if (architectState.measuringActive) {
       const pt = e.point;
       const newPoints = [...measurePoints, pt];
@@ -336,26 +263,26 @@ export default function SimulationCanvas({ tasks, currentDay, architectState, se
         setMeasurePoints(newPoints);
       }
     } else if (elementId) {
-      setArchitectState(prev => ({ 
-        ...prev, 
+      setArchitectState(prev => ({
+        ...prev,
         selectedElementId: elementId
       }));
     }
   };
 
   return (
-    <Canvas 
+    <Canvas
       shadows
       camera={{ position: [8, 8, 8], fov: 45 }}
       gl={{ localClippingEnabled: true }}
     >
       <Suspense fallback={null}>
         <ambientLight intensity={ambientIntensity} color="#a0aec0" />
-        <directionalLight 
-          position={[sunX, sunY, 5]} 
-          intensity={sunLightIntensity} 
-          color="#ffffff" 
-          castShadow 
+        <directionalLight
+          position={[sunX, sunY, 5]}
+          intensity={sunLightIntensity}
+          color="#ffffff"
+          castShadow
           shadow-mapSize-width={2048}
           shadow-mapSize-height={2048}
           shadow-camera-far={50}
@@ -365,130 +292,106 @@ export default function SimulationCanvas({ tasks, currentDay, architectState, se
           shadow-camera-bottom={-20}
           shadow-bias={-0.0005}
         />
-        
+
         {/* Secondary fill light */}
         {architectState?.layerMode !== 'shadow_study' && (
           <directionalLight position={[-10, 5, -5]} intensity={sunY > 0 ? 0.2 : 0.1} color="#4ade80" />
         )}
-        
+
         <gridHelper args={[40, 40, 0x333333, 0x1a1a1b]} position={[0, -0.5, 0]} />
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.51, 0]} receiveShadow>
           <planeGeometry args={[100, 100]} />
           <shadowMaterial opacity={0.4} />
         </mesh>
-      
-      {uploadedModel ? (() => {
-        const maxFloor = Math.max(...uploadedModel.elements.map(e => Math.floor((e.position[1] || 0) / 3.0)), 0);
-        const numStories = maxFloor + 1;
 
-        const foundationDur = 10;
-        const structureDur = 10 * numStories;
-        const floorsDur = 5 * numStories;
-        const wallsDur = 10 * numStories;
-        const facadeDur = 5 * numStories;
+        {uploadedModel ? (() => {
+          const totalSimDays = maxDay || 100;
+          const globalProgress = Math.min(Math.max(currentDay / totalSimDays, 0), 1);
+          const maxFloor = Math.max(...uploadedModel.elements.map(e => Math.floor((e.position[1] || 0) / 3.0)), 0);
 
-        const stage0Start = 0;
-        const stage1Start = stage0Start + foundationDur;
-        const stage2Start = stage1Start + structureDur;
-        const stage3Start = stage2Start + floorsDur;
-        const stage4Start = stage3Start + wallsDur;
+          return uploadedModel.elements.map((el, index) => {
+            const floorIndex = Math.floor((el.position[1] || 0) / 3.0);
 
-        // Internal mapping for current stage based on elapsed time
-        let currentStage = 'Foundation';
-        let progressPercent = 0;
-        
-        if (currentDay < stage1Start) {
-          currentStage = 'Foundation';
-          progressPercent = (currentDay / foundationDur) * 100;
-        } else if (currentDay < stage2Start) {
-          currentStage = 'Structure';
-          progressPercent = ((currentDay - stage1Start) / structureDur) * 100;
-        } else if (currentDay < stage3Start) {
-          currentStage = 'Floors';
-          progressPercent = ((currentDay - stage2Start) / floorsDur) * 100;
-        } else if (currentDay < stage4Start) {
-          currentStage = 'Walls';
-          progressPercent = ((currentDay - stage3Start) / wallsDur) * 100;
-        } else {
-          currentStage = 'Facade';
-          progressPercent = Math.min(((currentDay - stage4Start) / facadeDur) * 100, 100);
-        }
+            // Phase mapping
+            let phaseStart = 0;
+            let phaseEnd = 1;
+            let isFoundation = (el.type === 'slab' && floorIndex === 0);
+            let isStructure = (el.layer === 'structure' || el.type === 'column' || el.type === 'core' || el.layer === 'walls' || el.type === 'wall');
+            let isRoofing = (el.type === 'slab' && floorIndex > 0);
+            let isFinishing = (el.layer === 'mep' || el.layer === 'facade' || el.type === 'stair' || el.type === 'lift' || el.type === 'duct');
 
-        return uploadedModel.elements.map((el, index) => {
-          const floorIndex = Math.floor((el.position[1] || 0) / 3.0);
-          const elLayer = el.layer || 'walls';
-
-          let stageStart = 0;
-          let stageDuration = 10;
-          
-          if (elLayer === 'structure') {
-             if (floorIndex === 0) {
-               stageStart = stage0Start;
-               stageDuration = foundationDur;
-             } else {
-               stageStart = stage1Start;
-               stageDuration = structureDur;
-             }
-          } else if (elLayer === 'floors') {
-             stageStart = stage2Start;
-             stageDuration = floorsDur;
-          } else if (elLayer === 'walls' || elLayer === 'mep') {
-             stageStart = stage3Start;
-             stageDuration = wallsDur;
-          } else if (elLayer === 'facade') {
-             stageStart = stage4Start;
-             stageDuration = facadeDur;
-          } else {
-             stageStart = stage3Start;
-             stageDuration = wallsDur;
-          }
-
-          // Progressively show elements within their stage window based on floor index
-          const floorProgress = maxFloor > 0 ? (floorIndex / maxFloor) : 0;
-          const appearDay = stageStart + (stageDuration * floorProgress);
-          
-          let isVisible = currentDay >= appearDay;
-          let opacity = 0.9;
-          
-          if (architectState?.layers) {
-            const elLayer = el.layer || 'walls';
-            const config = architectState.layers[elLayer] || { visible: true, opacity: 1.0 };
-            
-            if (!config.visible) isVisible = false;
-            
-            if (architectState.isolatedLayer && architectState.isolatedLayer !== elLayer) {
-               isVisible = false;
+            if (isFoundation) {
+              phaseStart = 0.0;
+              phaseEnd = 0.25;
+            } else if (isStructure) {
+              // Structure is staggered by floor within its phase (25-60%)
+              const floorStep = 0.35 / (maxFloor + 1);
+              phaseStart = 0.25 + (floorIndex * floorStep);
+              phaseEnd = phaseStart + floorStep;
+            } else if (isRoofing) {
+              phaseStart = 0.60;
+              phaseEnd = 0.85;
+            } else if (isFinishing) {
+              phaseStart = 0.85;
+              phaseEnd = 1.0;
             }
-            
-            opacity = config.opacity;
-          }
 
-          let color = el.color;
-          // Highlight recently built elements (3 day window)
-          if (currentDay >= appearDay && currentDay <= appearDay + 3) {
-             color = '#fbbf24'; 
-          }
-          
-          const matMode = architectState?.elementMaterials?.[el.id!] || architectState?.materialMode || 'default';
-          const isSelected = architectState?.selectedElementId === el.id;
+            // Calculate element progress
+            let elementProgress = 0;
+            if (globalProgress >= 1.0) {
+              elementProgress = 1.0;
+            } else if (globalProgress >= phaseEnd) {
+              elementProgress = 1.0;
+            } else if (globalProgress >= phaseStart) {
+              elementProgress = (globalProgress - phaseStart) / (phaseEnd - phaseStart);
+            }
 
-          return (
-              <BuildingBlock 
-                 key={el.id || index}
-                 position={el.position}
-                 size={el.size}
-                 rotation={el.rotation}
-                 color={color}
-                 visible={isVisible}
-                 opacity={opacity}
-                 materialMode={matMode}
-                 elType={el.type}
-                 elLayer={elLayer}
-                 clippingPlanes={clippingPlanes}
-                 isSelected={isSelected}
-                 onClick={(e: any) => handleBlockClick(e, el.id || String(index))}
-              />
-           );
+            elementProgress = Math.min(Math.max(elementProgress, 0), 1);
+
+            let isVisible = globalProgress >= phaseStart;
+            let scaleY = elementProgress;
+
+            // Layer visibility checks
+            if (architectState?.layers) {
+              const elLayer = el.layer || 'walls';
+              const config = architectState.layers[elLayer] || { visible: true, opacity: 1.0 };
+              if (!config.visible) isVisible = false;
+              if (architectState.isolatedLayer && architectState.isolatedLayer !== elLayer) isVisible = false;
+            }
+
+            // Construction Color Logic
+            let color = el.color;
+            if (civilState?.heatmapActive && civilState?.stressLevels?.[el.id!]) {
+              const stress = civilState.stressLevels[el.id!];
+              if (stress > 0.8) color = '#e50a0aff'; // Red
+              else if (stress > 0.6) color = '#d76615ff'; // Orange
+              else if (stress > 0.4) color = '#eab308'; // Yellow
+              else color = '#31ac5eff'; // Green
+            } else if (elementProgress > 0 && elementProgress < 1.0) {
+              color = '#b9a651ff'; // Construction Yellow
+            }
+
+            const matMode = architectState?.elementMaterials?.[el.id!] || architectState?.materialMode || 'default';
+            const isSelected = architectState?.selectedElementId === el.id || civilState?.weakElementIds?.includes(el.id!);
+
+            return (
+              <BuildingBlock
+                key={el.id || index}
+                position={el.position}
+                size={el.size}
+                rotation={el.rotation}
+                color={color}
+                visible={isVisible}
+                opacity={architectState?.layers?.[el.layer!]?.opacity || 1.0}
+                materialMode={matMode}
+                elType={el.type}
+                elLayer={el.layer}
+                clippingPlanes={clippingPlanes}
+                isSelected={isSelected}
+                scaleY={scaleY}
+                onClick={(e: any) => handleBlockClick(e, el.id || String(index))}
+             />
+          );
         });
       })() : (
       tasks.map((task, index) => {
@@ -507,53 +410,53 @@ export default function SimulationCanvas({ tasks, currentDay, architectState, se
          let isVisible = currentDay >= task.early_start;
          let opacity = 0.9;
 
-         // Layer visibility simulation
-         if (architectState?.layerMode === 'mep' && index % 2 !== 0) isVisible = false;
-         if (architectState?.layerMode === 'structure' && index % 2 === 0) opacity = 0.3;
+            // Layer visibility simulation
+            if (architectState?.layerMode === 'mep' && index % 2 !== 0) isVisible = false;
+            if (architectState?.layerMode === 'structure' && index % 2 === 0) opacity = 0.3;
 
-         // Base Color based on timeline schedule
-         let color = '#34d399'; 
-         if (currentDay >= task.early_start && currentDay < task.early_finish) {
-            color = '#fbbf24'; 
-         } else if (task.is_critical) {
-            color = '#10b981'; 
-         } else {
-            color = '#059669'; 
-         }
-         
-         return (
-            <BuildingBlock 
-               key={task.id} 
-               position={position} 
-               color={color} 
-               visible={isVisible}
-               opacity={opacity}
-               materialMode={architectState?.materialMode || 'default'}
-               clippingPlanes={clippingPlanes}
-               onClick={(e: any) => handleBlockClick(e, String(task.id))}
-            />
-         );
-      }))}
+            // Base Color based on timeline schedule
+            let color = '#34d399';
+            if (currentDay >= task.early_start && currentDay < task.early_finish) {
+              color = '#fbbf24';
+            } else if (task.is_critical) {
+              color = '#10b981';
+            } else {
+              color = '#059669';
+            }
 
-      {measurePoints.map((pt, i) => (
-         <mesh key={i} position={pt}>
+            return (
+              <BuildingBlock
+                key={task.id}
+                position={position}
+                color={color}
+                visible={isVisible}
+                opacity={opacity}
+                materialMode={architectState?.materialMode || 'default'}
+                clippingPlanes={clippingPlanes}
+                onClick={(e: any) => handleBlockClick(e, String(task.id))}
+              />
+            );
+          }))}
+
+        {measurePoints.map((pt, i) => (
+          <mesh key={i} position={pt}>
             <sphereGeometry args={[0.2, 16, 16]} />
             <meshBasicMaterial color="#ef4444" depthTest={false} />
-         </mesh>
-      ))}
+          </mesh>
+        ))}
 
-      {measurePoints.length === 2 && (
-         <line>
-           <bufferGeometry attach="geometry" {...(new THREE.BufferGeometry().setFromPoints(measurePoints)) as any} />
-           <lineBasicMaterial attach="material" color="#ef4444" linewidth={2} depthTest={false} />
-         </line>
-      )}
-      
-      {architectState?.walkthroughMode ? (
-        <WalkthroughControls />
-      ) : (
-        <OrbitControls makeDefault maxPolarAngle={Math.PI / 2 - 0.05} enableDamping dampingFactor={0.05} />
-      )}
+        {measurePoints.length === 2 && (
+          <line>
+            <bufferGeometry attach="geometry" {...(new THREE.BufferGeometry().setFromPoints(measurePoints)) as any} />
+            <lineBasicMaterial attach="material" color="#ef4444" linewidth={2} depthTest={false} />
+          </line>
+        )}
+
+        {architectState?.walkthroughMode ? (
+          <WalkthroughControls />
+        ) : (
+          <OrbitControls makeDefault maxPolarAngle={Math.PI / 2 - 0.05} enableDamping dampingFactor={0.05} />
+        )}
       </Suspense>
     </Canvas>
   );

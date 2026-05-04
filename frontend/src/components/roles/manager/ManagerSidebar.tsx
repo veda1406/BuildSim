@@ -27,6 +27,8 @@ interface ManagerSidebarProps {
   numStories?: number;
   uploadedModel?: ParsedModel | null;
   onSimUpdate?: (simData: SimulationData | null, scenario: ScenarioResult2 | null) => void;
+  activeProjectId?: number;
+  triggerRefresh?: any;
 }
 
 interface Stage {
@@ -67,7 +69,7 @@ function estimateAreaFromModel(model: ParsedModel): number {
 const fmt = (n: number) => '₹' + n.toLocaleString('en-IN');
 const fmtDays = (n: number) => `${n > 0 ? '+' : ''}${n.toFixed(1)} days`;
 
-export default function ManagerSidebar({ currentDay, numStories = 4, uploadedModel, onSimUpdate }: ManagerSidebarProps) {
+export default function ManagerSidebar({ currentDay, numStories = 4, uploadedModel, onSimUpdate, activeProjectId, triggerRefresh }: ManagerSidebarProps) {
   const isModelLoaded = !!uploadedModel;
 
   // ── Area (auto or manual) ──────────────────────────────────────────────────
