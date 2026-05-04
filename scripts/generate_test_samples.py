@@ -14,31 +14,41 @@ def generate_luxury_villa_dxf(output_path):
     msp = doc.modelspace()
     
     # Layers
-    doc.layers.new('WALLS', dxfattribs={'color': 7})
-    doc.layers.new('STRUCTURE', dxfattribs={'color': 1}) # Red columns
-    doc.layers.new('MEP', dxfattribs={'color': 5}) # Blue ducts
+    doc.layers.new('walls', dxfattribs={'color': 7})
+    doc.layers.new('structure', dxfattribs={'color': 1}) # Red columns
+    doc.layers.new('mep', dxfattribs={'color': 5}) # Blue ducts
 
     # Exterior Footprint (15m x 10m)
     # Bottom Left [0,0]
     # CW
-    msp.add_line((0, 0), (15, 0), dxfattribs={'layer': 'WALLS'})
-    msp.add_line((15, 0), (15, 10), dxfattribs={'layer': 'WALLS'})
-    msp.add_line((15, 10), (0, 10), dxfattribs={'layer': 'WALLS'})
-    msp.add_line((0, 10), (0, 0), dxfattribs={'layer': 'WALLS'})
+    msp.add_line((0, 0), (15, 0), dxfattribs={'layer': 'walls'})
+    msp.add_line((15, 0), (15, 10), dxfattribs={'layer': 'walls'})
+    msp.add_line((15, 10), (0, 10), dxfattribs={'layer': 'walls'})
+    msp.add_line((0, 10), (0, 0), dxfattribs={'layer': 'walls'})
 
     # Interior Living Room Divide (at x=8)
-    msp.add_line((8, 0), (8, 10), dxfattribs={'layer': 'WALLS'})
+    msp.add_line((8, 0), (8, 10), dxfattribs={'layer': 'walls'})
     
     # Kitchen & Bed Divide (at y=5)
-    msp.add_line((8, 5), (15, 5), dxfattribs={'layer': 'WALLS'})
+    msp.add_line((8, 5), (15, 5), dxfattribs={'layer': 'walls'})
 
-    # Structure Points (Intersections for columns)
+    # Structure Points (Intersections for columns) -> Replaced with small 0.3x0.3 squares
     corners = [(0,0), (15,0), (15,10), (0,10), (8,0), (8,10), (8,5), (15,5)]
-    for pt in corners:
-        msp.add_point(pt, dxfattribs={'layer': 'STRUCTURE'})
+    s = 0.15 # half width
+    for cx, cy in corners:
+        msp.add_line((cx-s, cy-s), (cx+s, cy-s), dxfattribs={'layer': 'structure'})
+        msp.add_line((cx+s, cy-s), (cx+s, cy+s), dxfattribs={'layer': 'structure'})
+        msp.add_line((cx+s, cy+s), (cx-s, cy+s), dxfattribs={'layer': 'structure'})
+        msp.add_line((cx-s, cy+s), (cx-s, cy-s), dxfattribs={'layer': 'structure'})
 
-    # MEP Duct (Central Corridor)
-    msp.add_line((0.5, 4.5), (14.5, 4.5), dxfattribs={'layer': 'MEP'})
+    # MEP Duct (Central Corridor) -> Replaced single line with two parallel lines offset by 0.2
+    # Duct running from x=0.5 to x=14.5
+    # Original y=4.5. We make y=4.4 and y=4.6
+    msp.add_line((0.5, 4.4), (14.5, 4.4), dxfattribs={'layer': 'mep'})
+    msp.add_line((0.5, 4.6), (14.5, 4.6), dxfattribs={'layer': 'mep'})
+    # Cap the ends
+    msp.add_line((0.5, 4.4), (0.5, 4.6), dxfattribs={'layer': 'mep'})
+    msp.add_line((14.5, 4.4), (14.5, 4.6), dxfattribs={'layer': 'mep'})
 
     doc.saveas(output_path)
     print(f"DXF saved to {output_path}")

@@ -1,4 +1,4 @@
-import { useState, useEffect, Suspense, useRef } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import * as THREE from 'three';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Box, PointerLockControls, useTexture } from '@react-three/drei';
@@ -77,6 +77,7 @@ const BuildingBlock = ({
   opacity,
   materialMode,
   elType,
+  elLayer,
   clippingPlanes,
   onClick,
   isSelected,
@@ -95,12 +96,15 @@ const BuildingBlock = ({
     concrete: '/textures/concrete.png'
   });
 
+  const isGlass = materialMode === 'glass' || (elLayer === 'facade' && elType === 'window');
+
   // Basic material approximations
-  if (materialMode === 'glass') {
+  if (isGlass) {
     roughness = 0.1;
     metalness = 0.2;
-    mapColor = '#88ccff';
-    curOpacity = Math.min(opacity, 0.35);
+    mapColor = (elLayer === 'facade' && elType === 'window') ? '#88ccff' : color || '#88ccff';
+    curOpacity = Math.min(opacity, (elLayer === 'facade' && elType === 'window') ? 0.35 : 0.4);
+    transparent = true;
   } else if (elType === 'lift') {
     roughness = 0.1;
     metalness = 0.8;
@@ -156,8 +160,8 @@ const BuildingBlock = ({
       {/* Offset box so its bottom is at [0,0,0] relative to group */}
       <Box position={[0, height / 2, 0]} args={size || [3, 1, 3]} castShadow receiveShadow onPointerDown={(e) => { e.stopPropagation(); onClick(e); }}>
         {materialMode === 'glass' ? (
-          <meshPhysicalMaterial
-            color={mapColor}
+          <meshPhysicalMaterial 
+            color={mapColor} 
             map={textureMap}
             transparent={true}
             opacity={curOpacity}
@@ -194,42 +198,42 @@ export default function SimulationCanvas({ tasks, currentDay, architectState, se
   // Design Insights Effect
   useEffect(() => {
     if (uploadedModel && setArchitectState) {
-      const insights: string[] = [];
-      let smallRooms = 0;
-
-      uploadedModel.elements.forEach((el) => {
-        if (el.room_type === 'washroom' || el.room_type === 'bedroom') {
-          const area = el.size[0] * el.size[2];
-          if (area < 8.0) smallRooms++;
-        }
-      });
-
-      // Lightweight BBox Intersection (Simulating clash detection on first 50 elements)
-      let clashCount = 0;
-      const boxes = uploadedModel.elements.map(el => {
-        const m = new THREE.Box3();
-        m.setFromCenterAndSize(
-          new THREE.Vector3(...el.position),
-          new THREE.Vector3(...el.size)
-        );
-        return m;
-      });
-
-      for (let i = 0; i < Math.min(boxes.length, 50); i++) {
-        for (let j = i + 1; j < Math.min(boxes.length, 50); j++) {
-          if (boxes[i].intersectsBox(boxes[j])) {
-            clashCount++;
+       const insights: string[] = [];
+       let smallRooms = 0;
+       
+       uploadedModel.elements.forEach((el) => {
+          if (el.room_type === 'washroom' || el.room_type === 'bedroom') {
+            const area = el.size[0] * el.size[2];
+            if (area < 8.0) smallRooms++;
           }
-        }
-      }
+       });
+       
+       // Lightweight BBox Intersection (Simulating clash detection on first 50 elements)
+       let clashCount = 0;
+       const boxes = uploadedModel.elements.map(el => {
+         const m = new THREE.Box3();
+         m.setFromCenterAndSize(
+           new THREE.Vector3(...el.position),
+           new THREE.Vector3(...el.size)
+         );
+         return m;
+       });
 
-      if (smallRooms > 0) insights.push(`[MEDIUM] Warning: ${smallRooms} tight spatial clearances detected (Area < 8sqm).`);
-      if (clashCount > 5) insights.push(`[HIGH] Analysis: High geometric clash density detected (${clashCount} overlaps) within model.`);
-      insights.push("[LOW] Natural light analysis complete: Core daylight exposure is nominal.");
-
-      setArchitectState(prev => ({ ...prev, designInsights: insights }));
+       for (let i=0; i<Math.min(boxes.length, 50); i++) {
+         for (let j=i+1; j<Math.min(boxes.length, 50); j++) {
+           if (boxes[i].intersectsBox(boxes[j])) {
+              clashCount++;
+           }
+         }
+       }
+       
+       if (smallRooms > 0) insights.push(`[MEDIUM] Warning: ${smallRooms} tight spatial clearances detected (Area < 8sqm).`);
+       if (clashCount > 5) insights.push(`[HIGH] Analysis: High geometric clash density detected (${clashCount} overlaps) within model.`);
+       insights.push("[LOW] Natural light analysis complete: Core daylight exposure is nominal.");
+       
+       setArchitectState(prev => ({ ...prev, designInsights: insights }));
     }
-  }, [uploadedModel, setArchitectState]);
+  }, [uploadedModel, setArchitectState, architectState?.sunTime, currentDay]);
 
   // Sun calculations based on time (0-24)
   const sunTime = architectState?.sunTime ?? 12;
@@ -381,29 +385,30 @@ export default function SimulationCanvas({ tasks, currentDay, architectState, se
                 opacity={architectState?.layers?.[el.layer!]?.opacity || 1.0}
                 materialMode={matMode}
                 elType={el.type}
+                elLayer={el.layer}
                 clippingPlanes={clippingPlanes}
                 isSelected={isSelected}
                 scaleY={scaleY}
                 onClick={(e: any) => handleBlockClick(e, el.id || String(index))}
-              />
-            );
-          });
-        })() : (
-          tasks.map((task, index) => {
-            const columns = 2;
-            const row = Math.floor(index / columns);
-            const col = index % columns;
-
-            let xPos = col * 3.5 - 1.5;
-
-            // Apply design variant geometric shift
-            if (architectState?.designVariant === 'B') {
-              xPos += (row % 2 === 0 ? 0.5 : -0.5);
-            }
-
-            const position: [number, number, number] = [xPos, row * 1 + 0.5, 0];
-            let isVisible = currentDay >= task.early_start;
-            let opacity = 0.9;
+             />
+          );
+        });
+      })() : (
+      tasks.map((task, index) => {
+         const columns = 2;
+         const row = Math.floor(index / columns);
+         const col = index % columns;
+         
+         let xPos = col * 3.5 - 1.5;
+         
+         // Apply design variant geometric shift
+         if (architectState?.designVariant === 'B') {
+            xPos += (row % 2 === 0 ? 0.5 : -0.5);
+         }
+         
+         const position: [number, number, number] = [xPos, row * 1 + 0.5, 0];
+         let isVisible = currentDay >= task.early_start;
+         let opacity = 0.9;
 
             // Layer visibility simulation
             if (architectState?.layerMode === 'mep' && index % 2 !== 0) isVisible = false;
