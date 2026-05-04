@@ -7,15 +7,15 @@ import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { token, isValidating } = useAuth();
+  const { token, isValidating, connectionError } = useAuth();
 
-  if (isValidating) {
+  if (isValidating || connectionError) {
     return (
       <div className="min-h-screen bg-[#0b0c10] flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-8 h-8 rounded bg-emerald-500 flex items-center justify-center shadow-[0_0_20px_rgba(16,185,129,0.5)] animate-pulse" />
-          <span className="text-gray-500 text-sm font-semibold tracking-widest uppercase animate-pulse">
-            Connecting...
+          <div className={`w-8 h-8 rounded flex items-center justify-center ${connectionError ? 'bg-red-500 shadow-[0_0_20px_rgba(239,68,68,0.5)]' : 'bg-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.5)] animate-pulse'}`} />
+          <span className={`text-sm font-semibold tracking-widest uppercase ${connectionError ? 'text-red-500' : 'text-gray-500 animate-pulse'}`}>
+            {connectionError ? 'Failed to connect' : 'Connecting...'}
           </span>
         </div>
       </div>

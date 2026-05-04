@@ -19,7 +19,9 @@ export default function Dashboard() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [currentDay, setCurrentDay] = useState(0);
   const [maxDay, setMaxDay] = useState(1);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [simulationStarted, setSimulationStarted] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isConnected, setIsConnected] = useState(true);
   const [architectState, setArchitectState] = useState<ArchitectState>({
     materialMode: 'default',
     sectionCutEnabled: false,
@@ -66,15 +68,35 @@ export default function Dashboard() {
 
   const fetchTasks = () => {
     if (!token) return;
-    axios.get('http://127.0.0.1:8000/tasks/', { headers: { Authorization: `Bearer ${token}` } })
+    console.log("[Dashboard] Fetching tasks...");
+    setIsLoading(true);
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    axios.get('http://127.0.0.1:8000/tasks/', { 
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal
+    })
       .then((res) => {
+        clearTimeout(timeoutId);
         setTasks(res.data);
+        setIsConnected(true);
+        console.log(`[Dashboard] Tasks fetched successfully: ${res.data.length} tasks`);
         if (res.data.length > 0) {
            const maxDuration = Math.max(...res.data.map((t: Task) => t.early_finish));
            setMaxDay(maxDuration);
+           setSimulationStarted(true);
         }
       })
-      .catch(console.error);
+      .catch((err) => {
+        clearTimeout(timeoutId);
+        console.error('[Dashboard] Task fetch error:', err);
+        setIsConnected(false);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
   };
 
   // PM animation state — lifted from ManagerSidebar via callback
@@ -179,28 +201,20 @@ export default function Dashboard() {
   }, [pmSimData?.current_stage, user?.role]);
 
   useEffect(() => {
-    if (!token) return;
-    axios.get('http://127.0.0.1:8000/tasks/', { headers: { Authorization: `Bearer ${token}` } })
-      .then((res) => {
-        setTasks(res.data);
-        if (res.data.length > 0) {
-           const maxDuration = Math.max(...res.data.map((t: Task) => t.early_finish));
-           setMaxDay(maxDuration);
-        }
-      })
-      .catch(console.error);
+    fetchTasks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   const { speedMultiplier } = useSimulation();
 
   useEffect(() => {
     let interval: any;
-    if (isPlaying) {
+    if (simulationStarted) {
       const intervalDelay = 300 / speedMultiplier;
       interval = setInterval(() => {
         setCurrentDay((prev) => {
           if (prev >= maxDay) {
-            setIsPlaying(false);
+            setSimulationStarted(false);
             return prev;
           }
           return prev + 1;
@@ -208,7 +222,7 @@ export default function Dashboard() {
       }, intervalDelay);
     }
     return () => clearInterval(interval);
-  }, [isPlaying, maxDay, speedMultiplier]);
+  }, [simulationStarted, maxDay, speedMultiplier]);
 
   return (
     <div className="w-full h-screen flex flex-col bg-[#0b0c10] text-gray-300 font-sans selection:bg-emerald-500/30">
@@ -254,21 +268,21 @@ export default function Dashboard() {
           <div className="flex bg-[#121419] border border-gray-700 rounded overflow-hidden shadow-[0_0_15px_rgba(16,185,129,0.2)]">
             <button 
               onClick={() => {
-                if (!isPlaying && currentDay >= maxDay) {
+                if (!simulationStarted && currentDay >= maxDay) {
                   setCurrentDay(0);
-                  setIsPlaying(true);
+                  setSimulationStarted(true);
                 } else {
-                  setIsPlaying(!isPlaying);
+                  setSimulationStarted(!simulationStarted);
                 }
               }}
               className="flex items-center gap-2 px-6 py-2 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold tracking-wider transition-colors">
-              {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-              {isPlaying ? 'PAUSE' : 'PLAY'}
+              {simulationStarted ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+              {simulationStarted ? 'PAUSE' : 'PLAY'}
             </button>
             <button 
               onClick={() => {
                 setCurrentDay(0);
-                setIsPlaying(false);
+                setSimulationStarted(false);
               }}
               className="flex items-center gap-2 px-4 py-2 hover:bg-gray-800 text-gray-300 text-xs font-bold tracking-wider transition-colors border-l border-gray-700">
               <RotateCcw className="w-4 h-4" /> RESET
@@ -282,6 +296,13 @@ export default function Dashboard() {
 
       {/* Main Layout */}
       <div className="flex flex-1 overflow-hidden relative">
+        
+        {!isConnected && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 bg-red-500/10 border border-red-500/40 rounded-xl text-red-400 text-sm font-semibold shadow-xl backdrop-blur-sm">
+            <span>⚠</span>
+            <span>Failed to connect to simulation server.</span>
+          </div>
+        )}
         
         {user?.role === 'Construction Planner' && <PlannerSidebar tasks={tasks} currentDay={currentDay} />}
         
