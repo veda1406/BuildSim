@@ -21,6 +21,7 @@ app.add_middleware(
 def read_root():
     return {"status": "BuildSim Backend Running"}
 
-from routers import tasks, auth
+from routers import tasks, auth, project
 app.include_router(tasks.router)
 app.include_router(auth.router)
+app.include_router(project.router)
