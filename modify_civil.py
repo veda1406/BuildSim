@@ -1,17 +1,19 @@
-import { useState, useMemo, useEffect } from 'react';
-import { Activity, ShieldAlert, AlertTriangle, Cuboid, TrendingUp, Layers, CheckCircle2, Zap, Settings2, Flame, AlertCircle } from 'lucide-react';
-import type { Task, ParsedModel, CivilState } from '../../../types';
+import re
 
-interface CivilSidebarProps {
-  tasks: Task[];
-  model?: ParsedModel | null;
-  numStories?: number;
-  civilState?: CivilState;
-  setCivilState?: React.Dispatch<React.SetStateAction<CivilState>>;
-}
+with open("frontend/src/components/roles/civil/CivilSidebar.tsx", "r", encoding="utf-8") as f:
+    content = f.read()
 
-export default function CivilSidebar({ tasks, model, numStories = 4, civilState, setCivilState }: CivilSidebarProps) {
-  const [activeTab, setActiveTab] = useState<'structural' | 'materials' | 'dependencies'>('structural');
+# 1. Update Imports
+content = content.replace(
+    "import { Activity, ShieldAlert, AlertTriangle, Cuboid, TrendingUp, Layers, CheckCircle2, Zap } from 'lucide-react';",
+    "import { Activity, ShieldAlert, AlertTriangle, Cuboid, TrendingUp, Layers, CheckCircle2, Zap, Settings2, Flame, AlertCircle } from 'lucide-react';"
+)
+
+# 2. Update Component State and Analytics
+analytics_start = "  const [activeTab, setActiveTab] = useState<'structural' | 'materials' | 'dependencies'>('structural');"
+analytics_end = "  }, [model, numStories]);"
+
+new_analytics = """  const [activeTab, setActiveTab] = useState<'structural' | 'materials' | 'dependencies'>('structural');
   const [showConstraints, setShowConstraints] = useState(false);
 
   const {
@@ -176,7 +178,7 @@ export default function CivilSidebar({ tasks, model, numStories = 4, civilState,
     };
   }, [model, numStories, civilState]);
 
-  
+  import { useEffect } from 'react';
   useEffect(() => {
     if (setCivilState) {
       setCivilState(prev => {
@@ -214,43 +216,23 @@ export default function CivilSidebar({ tasks, model, numStories = 4, civilState,
        }));
     }
   };
+"""
 
+content = content[:content.find(analytics_start)] + new_analytics + content[content.find(analytics_end)+len(analytics_end):]
 
-  const toggleCriticalHighlight = () => {
-    if (!setCivilState) return;
-    setCivilState(prev => ({
-      ...prev,
-      weakElementIds: prev.weakElementIds.length > 0 ? [] : analytics.weakElements
-    }));
-  };
+# Move import useEffect
+content = content.replace("import { useEffect } from 'react';", "")
+content = content.replace("import { useState, useMemo }", "import { useState, useMemo, useEffect }")
 
-  const isHighlightActive = civilState?.weakElementIds && civilState.weakElementIds.length > 0;
-
-  return (
-    <aside className="w-[24rem] z-20 border-l border-gray-800 bg-[#0b0c10] flex flex-col h-full shadow-2xl">
-      {/* Sidebar Header */}
-      <div className="p-5 border-b border-gray-800 bg-[#0f1115]">
-        <h2 className="text-white font-black tracking-widest text-sm flex items-center gap-2">
-          <Cuboid className="w-4 h-4 text-emerald-500" /> CIVIL ENGINEERING
-        </h2>
-        
-        {/* Feasibility Status */}
-        <div className={`mt-4 p-3 rounded-lg border flex items-center justify-between
-          ${analytics.feasibility === 'SAFE' ? 'bg-emerald-500/10 border-emerald-500/30' : 
-            analytics.feasibility === 'NEEDS REINFORCEMENT' ? 'bg-yellow-500/10 border-yellow-500/30' : 
-            'bg-red-500/10 border-red-500/30'}`}
-        >
-          <div>
-            <div className="text-[0.6rem] text-gray-400 tracking-widest font-bold mb-1">FEASIBILITY STATUS</div>
-            <div className={`font-black text-xs tracking-wider
-              ${analytics.feasibility === 'SAFE' ? 'text-emerald-400' : 
-                analytics.feasibility === 'NEEDS REINFORCEMENT' ? 'text-yellow-400' : 
-                'text-red-400'}`}
-            >
-              {analytics.feasibility}
-            </div>
+# Update UI Part 1: Header (Failure Risk, Heatmap Toggle)
+header_target = """          <div className="text-right">
+            <div className="text-[0.6rem] text-gray-400 tracking-widest font-bold mb-1">SAFETY FACTOR</div>
+            <div className="text-white font-black text-sm">{analytics.safetyFactor.toFixed(2)}</div>
           </div>
-          <div className="text-right">
+        </div>
+      </div>"""
+
+header_new = """          <div className="text-right">
             <div className="text-[0.6rem] text-gray-400 tracking-widest font-bold mb-1">SAFETY FACTOR</div>
             <div className="text-white font-black text-sm">{analytics.safetyFactor.toFixed(2)}</div>
           </div>
@@ -275,31 +257,12 @@ export default function CivilSidebar({ tasks, model, numStories = 4, civilState,
             <Flame className="w-3 h-3" /> HEATMAP {heatmapActive ? 'ON' : 'OFF'}
           </button>
         </div>
-      </div>
+      </div>"""
 
-      {/* Tabs */}
-      <div className="flex bg-[#0f1115] border-b border-gray-800">
-        {(['structural', 'materials', 'dependencies'] as const).map(tab => (
-          <button 
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`flex-1 text-[0.65rem] tracking-wider font-bold py-3 transition-colors ${
-              activeTab === tab 
-                ? 'text-emerald-400 border-b-2 border-emerald-500 bg-[#161921]' 
-                : 'text-gray-500 hover:text-gray-300'
-            }`}
-          >
-            {tab.toUpperCase()}
-          </button>
-        ))}
-      </div>
+content = content.replace(header_target, header_new)
 
-      {/* Content Scroll Area */}
-      <div className="flex-1 overflow-y-auto p-5 gap-6 flex flex-col">
-        
-        {activeTab === 'structural' && (
-          <>
-                        {/* Constraints Panel */}
+# Add Constraints Panel
+constraints_ui = """            {/* Constraints Panel */}
             <div className="bg-[#121419] border border-gray-800 rounded-xl overflow-hidden">
               <button 
                 onClick={() => setShowConstraints(!showConstraints)}
@@ -364,42 +327,23 @@ export default function CivilSidebar({ tasks, model, numStories = 4, civilState,
               )}
             </div>
 
-            {/* Load Approximation */}
-            <div className="bg-[#121419] border border-gray-800 p-4 rounded-xl">
-              <h4 className="text-[0.65rem] text-gray-500 tracking-widest font-bold mb-4 flex items-center gap-2">
-                <TrendingUp className="w-3 h-3 text-blue-500" /> LOAD APPROXIMATION
-              </h4>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <div className="text-[0.6rem] text-gray-500 font-bold mb-1">TOTAL LOAD</div>
-                  <div className="text-white font-black text-sm">{Math.round(analytics.totalLoad).toLocaleString()} <span className="text-[0.65rem] text-gray-500">kN</span></div>
-                </div>
-                <div>
-                  <div className="text-[0.6rem] text-gray-500 font-bold mb-1">PER COLUMN (AVG)</div>
-                  <div className="text-white font-black text-sm">{Math.round(analytics.loadPerColumn).toLocaleString()} <span className="text-[0.65rem] text-gray-500">kN</span></div>
-                </div>
-              </div>
-              <div className="mt-4 pt-4 border-t border-gray-800">
-                <div className="text-[0.6rem] text-gray-500 font-bold mb-1">RECOMMENDED FOUNDATION</div>
-                <div className="text-blue-400 font-bold text-xs">{analytics.foundation.toUpperCase()}</div>
-              </div>
-            </div>
+            {/* Load Approximation */}"""
 
-            {/* Constraints & Violations */}
-            {analytics.violations.length > 0 && (
-              <div className="bg-red-500/5 border border-red-500/20 p-4 rounded-xl">
-                <h4 className="text-[0.65rem] text-red-500 tracking-widest font-bold mb-3 flex items-center gap-2">
-                  <ShieldAlert className="w-3 h-3" /> STRUCTURAL RISKS
-                </h4>
-                <ul className="flex flex-col gap-2 mb-4">
-                  {analytics.violations.map((v, i) => (
-                    <li key={i} className="text-gray-300 text-[0.7rem] flex items-start gap-2">
-                      <span className="text-red-500 mt-0.5">•</span> {v}
-                    </li>
-                  ))}
-                </ul>
-                
-                <div className="border-t border-red-500/20 pt-3">
+content = content.replace("{/* Load Approximation */}", constraints_ui)
+
+# Update Suggestions to be interactive
+suggestions_target = """                <div className="border-t border-red-500/20 pt-3">
+                  <h5 className="text-[0.6rem] text-yellow-500 tracking-widest font-bold mb-2">SUGGESTED REINFORCEMENTS</h5>
+                  <div className="flex flex-wrap gap-2">
+                    {analytics.suggestions.map((s, i) => (
+                      <span key={i} className="bg-[#1a1d24] border border-gray-700 text-gray-300 px-2 py-1 rounded text-[0.65rem] font-bold">
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                </div>"""
+
+suggestions_new = """                <div className="border-t border-red-500/20 pt-3">
                   <h5 className="text-[0.6rem] text-yellow-500 tracking-widest font-bold mb-2">SUGGESTED REINFORCEMENTS</h5>
                   <div className="flex flex-col gap-2">
                     {analytics.suggestions.map((s, i) => (
@@ -414,126 +358,14 @@ export default function CivilSidebar({ tasks, model, numStories = 4, civilState,
                       </div>
                     ))}
                   </div>
-                </div>
-              </div>
-            )}
+                </div>"""
 
-            {/* Critical Element Highlighting Button */}
-            {analytics.weakElements.length > 0 && (
-              <button 
-                onClick={toggleCriticalHighlight}
-                className={`flex items-center justify-center gap-2 p-3 rounded-lg border text-xs font-bold tracking-wider transition-all
-                  ${isHighlightActive 
-                    ? 'bg-red-500 text-black border-red-400 shadow-[0_0_15px_rgba(239,68,68,0.3)]' 
-                    : 'bg-transparent text-red-400 border-red-500/50 hover:bg-red-500/10'}`}
-              >
-                <Zap className="w-4 h-4" /> {isHighlightActive ? 'HIDE CRITICAL ELEMENTS' : 'HIGHLIGHT CRITICAL ELEMENTS'}
-              </button>
-            )}
+content = content.replace(suggestions_target, suggestions_new)
 
-            {/* Difficulty Index */}
-            <div className="flex justify-between items-center bg-[#121419] border border-gray-800 p-4 rounded-xl">
-               <span className="text-[0.65rem] text-gray-500 tracking-widest font-bold">DIFFICULTY INDEX</span>
-               <span className={`text-[0.65rem] font-black px-2 py-0.5 rounded
-                 ${analytics.difficulty === 'LOW' ? 'bg-emerald-500 text-black' : 
-                   analytics.difficulty === 'MEDIUM' ? 'bg-yellow-500 text-black' : 'bg-red-500 text-black'}`}
-               >
-                 {analytics.difficulty}
-               </span>
-            </div>
-          </>
-        )}
+# Update Currency (Cost) to INR
+content = content.replace("~${(analytics.concreteVol * 120).toLocaleString(undefined, {maximumFractionDigits: 0})}", "~₹{(analytics.concreteVol * 120 * 83).toLocaleString('en-IN', {maximumFractionDigits: 0})}")
+content = content.replace("~${(analytics.steelQty * 800).toLocaleString(undefined, {maximumFractionDigits: 0})}", "~₹{(analytics.steelQty * 800 * 83).toLocaleString('en-IN', {maximumFractionDigits: 0})}")
+content = content.replace("~${(analytics.brickCount * 0.5).toLocaleString(undefined, {maximumFractionDigits: 0})}", "~₹{(analytics.brickCount * 0.5 * 83).toLocaleString('en-IN', {maximumFractionDigits: 0})}")
 
-        {activeTab === 'materials' && (
-          <div className="flex flex-col gap-4">
-            <div className="bg-[#121419] border border-gray-800 p-4 rounded-xl">
-              <h4 className="text-[0.65rem] text-gray-500 tracking-widest font-bold mb-4 flex items-center gap-2">
-                <Layers className="w-3 h-3 text-purple-500" /> QUANTITY ESTIMATION
-              </h4>
-              
-              <div className="flex flex-col gap-4">
-                <div className="flex justify-between items-end border-b border-gray-800 pb-3">
-                  <div>
-                    <div className="text-[0.6rem] text-gray-500 font-bold mb-1">CONCRETE</div>
-                    <div className="text-white font-black text-sm">{analytics.concreteVol.toLocaleString(undefined, {maximumFractionDigits: 1})} <span className="text-[0.65rem] text-gray-500">m³</span></div>
-                  </div>
-                  <div className="text-[0.6rem] text-emerald-500 font-bold">~₹{(analytics.concreteVol * 120 * 83).toLocaleString('en-IN', {maximumFractionDigits: 0})}</div>
-                </div>
-
-                <div className="flex justify-between items-end border-b border-gray-800 pb-3">
-                  <div>
-                    <div className="text-[0.6rem] text-gray-500 font-bold mb-1">STRUCTURAL STEEL</div>
-                    <div className="text-white font-black text-sm">{analytics.steelQty.toLocaleString(undefined, {maximumFractionDigits: 1})} <span className="text-[0.65rem] text-gray-500">tons</span></div>
-                  </div>
-                  <div className="text-[0.6rem] text-emerald-500 font-bold">~₹{(analytics.steelQty * 800 * 83).toLocaleString('en-IN', {maximumFractionDigits: 0})}</div>
-                </div>
-
-                <div className="flex justify-between items-end">
-                  <div>
-                    <div className="text-[0.6rem] text-gray-500 font-bold mb-1">BRICKS / BLOCKS</div>
-                    <div className="text-white font-black text-sm">{analytics.brickCount.toLocaleString()} <span className="text-[0.65rem] text-gray-500">pcs</span></div>
-                  </div>
-                  <div className="text-[0.6rem] text-emerald-500 font-bold">~₹{(analytics.brickCount * 0.5 * 83).toLocaleString('en-IN', {maximumFractionDigits: 0})}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'dependencies' && (
-          <div className="bg-[#121419] border border-gray-800 p-4 rounded-xl flex flex-col h-full">
-            <h4 className="text-[0.65rem] text-gray-500 tracking-widest font-bold mb-4 flex items-center gap-2">
-              <Activity className="w-3 h-3 text-orange-500" /> LOAD PATH DEPENDENCY
-            </h4>
-            <p className="text-[0.65rem] text-gray-400 mb-4 leading-relaxed">
-              Select an element level to simulate failure impact propagation.
-            </p>
-
-            <div className="flex flex-col gap-2 flex-1 relative">
-              {/* Dependency Tree UI */}
-              {[
-                { id: 'slab', name: 'Slab System', affects: ['Beams'] },
-                { id: 'beam', name: 'Primary & Secondary Beams', affects: ['Columns', 'Slabs'] },
-                { id: 'column', name: 'Load Bearing Columns', affects: ['Foundation', 'Beams', 'Slabs'] },
-                { id: 'foundation', name: 'Foundation System', affects: ['Entire Structure'] }
-              ].map((level, idx, arr) => {
-                const isSelected = civilState?.selectedDependency === level.id;
-                
-                return (
-                  <div key={level.id} className="relative z-10">
-                    <button 
-                      onClick={() => setCivilState?.(prev => ({ ...prev, selectedDependency: prev.selectedDependency === level.id ? null : level.id }))}
-                      className={`w-full text-left p-3 rounded-lg border text-xs font-bold transition-all flex justify-between items-center
-                        ${isSelected 
-                          ? 'bg-orange-500/20 border-orange-500/50 text-orange-400 shadow-md' 
-                          : 'bg-[#1a1d24] border-gray-800 text-gray-300 hover:border-gray-600'}`}
-                    >
-                      <span>{level.name}</span>
-                      {isSelected && <AlertTriangle className="w-4 h-4" />}
-                    </button>
-                    
-                    {/* Failure propagation visualization */}
-                    {isSelected && (
-                      <div className="mt-2 mb-4 p-3 bg-red-500/5 border border-red-500/20 rounded-lg">
-                        <div className="text-[0.6rem] text-red-400 tracking-widest font-bold mb-1">FAILURE IMPACT:</div>
-                        <div className="text-[0.7rem] text-gray-300">Affects {level.affects.join(', ')} directly. {idx > 0 && "Load redistribution required."}</div>
-                      </div>
-                    )}
-                    
-                    {idx < arr.length - 1 && (
-                      <div className="w-0.5 h-4 bg-gray-800 ml-4 my-1 relative">
-                         {isSelected && <div className="absolute inset-0 bg-orange-500 animate-pulse"></div>}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
-
-      </div>
-    </aside>
-  );
-}
-
+with open("frontend/src/components/roles/civil/CivilSidebar.tsx", "w", encoding="utf-8") as f:
+    f.write(content)

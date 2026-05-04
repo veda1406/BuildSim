@@ -55,7 +55,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         })
         .catch(() => {
           logout();
+        })
+        .finally(() => {
+          setIsValidating(false);
         });
+    } else {
+      setIsValidating(false);
     }
   }, [token]);
 

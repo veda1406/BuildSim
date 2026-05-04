@@ -54,3 +54,17 @@ export interface ParsedModelElement {
 export interface ParsedModel {
   elements: ParsedModelElement[];
 }
+
+export interface CivilState {
+  weakElementIds: string[];
+  selectedDependency: string | null;
+  soilType?: 'Clay' | 'Sand' | 'Rock';
+  windZone?: 'Low' | 'Medium' | 'High';
+  seismicZone?: 'Low' | 'Moderate' | 'High';
+  laborAvailability?: 'Low' | 'Medium' | 'High';
+  materialSupply?: 'Stable' | 'Delayed';
+  optimizationMode?: 'Cost' | 'Safety';
+  appliedSuggestions?: string[];
+  heatmapActive?: boolean;
+  stressLevels?: Record<string, number>;
+}
