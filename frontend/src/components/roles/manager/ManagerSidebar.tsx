@@ -28,7 +28,7 @@ export default function ManagerSidebar({ currentDay, activeProjectId, triggerRef
   // Fetch tasks to derive phase delays (requires auth token)
   useEffect(() => {
     if (!token) return;
-    fetch('http://localhost:8000/tasks/', {
+    fetch('http://127.0.0.1:8000/tasks/', {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(res => {
@@ -44,7 +44,7 @@ export default function ManagerSidebar({ currentDay, activeProjectId, triggerRef
   // Fetch specific project when activeProjectId changes
   useEffect(() => {
     setProject(null); // Set loading state while fetching new project
-    fetch(`http://localhost:8000/projects/${activeProjectId}`)
+    fetch(`http://127.0.0.1:8000/projects/${activeProjectId}`)
       .then(res => res.json())
       .then(data => {
         if (!data.detail) setProject(data);

@@ -3,7 +3,7 @@ import axios from 'axios';
 import { Upload, Play, Pause, RotateCcw, Layers, LogOut } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSimulation } from '../context/SimulationContext';
-import type { Task, ArchitectState, ParsedModel } from '../types';
+import type { Task, ArchitectState, ParsedModel, CivilState } from '../types';
 
 import SimulationCanvas from '../components/core/SimulationCanvas';
 import TimelineSlider from '../components/core/TimelineSlider';
@@ -42,6 +42,19 @@ export default function Dashboard() {
     designVariant: 'A',
     walkthroughMode: false,
     layerMode: 'all',
+  });
+  const [civilState, setCivilState] = useState<CivilState>({
+    weakElementIds: [],
+    selectedDependency: null,
+    soilType: 'Sand',
+    windZone: 'Medium',
+    seismicZone: 'Moderate',
+    laborAvailability: 'Medium',
+    materialSupply: 'Stable',
+    optimizationMode: 'Safety',
+    appliedSuggestions: [],
+    heatmapActive: false,
+    stressLevels: {}
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -89,7 +102,7 @@ export default function Dashboard() {
       formData.append('num_stories', numStories.toString());
       formData.append('project_id', activeProjectId.toString());
 
-      const response = await axios.post('http://localhost:8000/tasks/upload', formData, {
+      const response = await axios.post('http://127.0.0.1:8000/tasks/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
           Authorization: `Bearer ${token}`
@@ -235,6 +248,7 @@ export default function Dashboard() {
                currentDay={currentDay} 
                architectState={architectState} 
                setArchitectState={setArchitectState} 
+               civilState={civilState}
                uploadedModel={uploadedModel}
                maxDay={maxDay}
              />
@@ -242,7 +256,7 @@ export default function Dashboard() {
         </main>
 
         {user?.role === 'Architect' && <ArchitectSidebar architectState={architectState} setArchitectState={setArchitectState} hasModel={!!uploadedModel} />}
-        {user?.role === 'Civil Engineer' && <CivilSidebar tasks={tasks} />}
+        {user?.role === 'Civil Engineer' && <CivilSidebar tasks={tasks} model={uploadedModel} numStories={numStories} civilState={civilState} setCivilState={setCivilState} />}
         {user?.role === 'Project Manager' && <ManagerSidebar currentDay={currentDay} activeProjectId={activeProjectId} triggerRefresh={uploadedModel} />}
 
       </div>
