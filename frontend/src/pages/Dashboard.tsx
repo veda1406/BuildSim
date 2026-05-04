@@ -11,6 +11,7 @@ import ArchitectSidebar from '../components/roles/architect/ArchitectSidebar';
 import CivilSidebar from '../components/roles/civil/CivilSidebar';
 import PlannerSidebar from '../components/roles/planner/PlannerSidebar';
 import ManagerSidebar from '../components/roles/manager/ManagerSidebar';
+import ProjectManagerCanvas from '../components/roles/manager/ProjectManagerCanvas';
 import SpeedToggle from '../components/shared/SpeedToggle';
 
 export default function Dashboard() {
@@ -76,6 +77,15 @@ export default function Dashboard() {
       .catch(console.error);
   };
 
+  // PM animation state — lifted from ManagerSidebar via callback
+  const [pmSimData, setPmSimData] = useState<any>(null);
+  const [pmScenario, setPmScenario] = useState<any>(null);
+
+  const handlePmSimUpdate = (sim: any, scn: any) => {
+    if (sim) setPmSimData(sim);
+    if (scn) setPmScenario(scn);
+  };
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -115,8 +125,9 @@ export default function Dashboard() {
       if (response.data.model_data) {
         setUploadedModel(response.data.model_data);
         const maxFloor = Math.max(...response.data.model_data.elements.map((e: any) => Math.floor((e.position[1] || 0) / 3.0)), 0);
-        const numStories = maxFloor + 1;
-        const totalDuration = 10 + (10 * numStories) + (5 * numStories) + (10 * numStories) + (5 * numStories);
+        const detectedStories = maxFloor + 1;
+        setNumStories(detectedStories); // FIX: sync state from uploaded model
+        const totalDuration = 10 + (10 * detectedStories) + (5 * detectedStories) + (10 * detectedStories) + (5 * detectedStories);
         setMaxDay(totalDuration);
         setCurrentDay(0);
       }
@@ -136,6 +147,36 @@ export default function Dashboard() {
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
+
+  // Sync maxDay with PM final_duration when PM simulation updates
+  useEffect(() => {
+    if (user?.role === 'Project Manager' && pmSimData?.final_duration) {
+      setMaxDay(pmSimData.final_duration);
+    }
+  }, [pmSimData?.final_duration, user?.role]);
+
+  // 3D layer highlighting — dim inactive layers based on active PM phase
+  useEffect(() => {
+    if (user?.role !== 'Project Manager' || !pmSimData?.current_stage) return;
+    const phaseLayerMap: Record<string, string> = {
+      Foundation: 'structure',
+      Structure:  'structure',
+      Floors:     'floors',
+      Walls:      'walls',
+      Facade:     'facade',
+    };
+    const active = phaseLayerMap[pmSimData.current_stage] ?? null;
+    setArchitectState(prev => ({
+      ...prev,
+      layers: {
+        structure: { visible: true, opacity: active === 'structure' ? 1 : 0.15 },
+        floors:    { visible: true, opacity: active === 'floors'    ? 1 : 0.15 },
+        walls:     { visible: true, opacity: active === 'walls'     ? 1 : 0.15 },
+        mep:       { visible: true, opacity: 0.08 },
+        facade:    { visible: true, opacity: active === 'facade'    ? 1 : 0.15 },
+      },
+    }));
+  }, [pmSimData?.current_stage, user?.role]);
 
   useEffect(() => {
     if (!token) return;
@@ -258,11 +299,28 @@ export default function Dashboard() {
                maxDay={maxDay}
              />
           </div>
+          {/* PM Timeline Animation Overlay */}
+          {user?.role === 'Project Manager' && (
+            <ProjectManagerCanvas
+              currentDay={currentDay}
+              simData={pmSimData}
+              scenario={pmScenario}
+            />
+          )}
         </main>
 
         {user?.role === 'Architect' && <ArchitectSidebar architectState={architectState} setArchitectState={setArchitectState} hasModel={!!uploadedModel} />}
         {user?.role === 'Civil Engineer' && <CivilSidebar tasks={tasks} model={uploadedModel} numStories={numStories} civilState={civilState} setCivilState={setCivilState} />}
-        {user?.role === 'Project Manager' && <ManagerSidebar currentDay={currentDay} activeProjectId={activeProjectId} triggerRefresh={uploadedModel} />}
+        {user?.role === 'Project Manager' && (
+          <ManagerSidebar 
+            currentDay={currentDay} 
+            numStories={numStories} 
+            uploadedModel={uploadedModel} 
+            onSimUpdate={handlePmSimUpdate}
+            activeProjectId={activeProjectId}
+            triggerRefresh={uploadedModel}
+          />
+        )}
 
       </div>
     </div>
