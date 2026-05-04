@@ -318,7 +318,8 @@ export default function SimulationCanvas({ tasks, currentDay, architectState, se
             let isFoundation = (el.type === 'slab' && floorIndex === 0);
             let isStructure = (el.layer === 'structure' || el.type === 'column' || el.type === 'core' || el.layer === 'walls' || el.type === 'wall');
             let isRoofing = (el.type === 'slab' && floorIndex > 0);
-            let isFinishing = (el.layer === 'mep' || el.layer === 'facade' || el.type === 'stair' || el.type === 'lift' || el.type === 'duct');
+            let isStair = (el.type === 'stair' || (el.layer && el.layer.toLowerCase().includes('stair')));
+            let isFinishing = (!isStair && (el.layer === 'mep' || el.layer === 'facade' || el.type === 'lift' || el.type === 'duct'));
 
             if (isFoundation) {
               phaseStart = 0.0;
@@ -338,18 +339,58 @@ export default function SimulationCanvas({ tasks, currentDay, architectState, se
 
             // Calculate element progress
             let elementProgress = 0;
-            if (globalProgress >= 1.0) {
-              elementProgress = 1.0;
-            } else if (globalProgress >= phaseEnd) {
-              elementProgress = 1.0;
-            } else if (globalProgress >= phaseStart) {
-              elementProgress = (globalProgress - phaseStart) / (phaseEnd - phaseStart);
+            let isVisible = false;
+            let scaleY = 1.0;
+
+            if (isStair) {
+              // STAIRS RENDERING LOGIC
+              // Map the stair progress alongside the main construction phases (25% - 85%)
+              const stairPhaseStart = 0.25;
+              const stairPhaseEnd = 0.85;
+              const totalFloors = maxFloor + 1;
+              
+              let stairGlobalProgress = 0;
+              if (globalProgress >= stairPhaseEnd) stairGlobalProgress = 1.0;
+              else if (globalProgress > stairPhaseStart) stairGlobalProgress = (globalProgress - stairPhaseStart) / (stairPhaseEnd - stairPhaseStart);
+
+              const totalStairProgress = stairGlobalProgress * totalFloors;
+              const currentStairFloor = Math.floor(totalStairProgress);
+              const floorStairProgress = totalStairProgress - currentStairFloor;
+
+              if (floorIndex < currentStairFloor) {
+                isVisible = true;
+                scaleY = 1.0;
+                elementProgress = 1.0;
+              } else if (floorIndex === currentStairFloor) {
+                // Slab dependency: stairs begin appearing after 50% of the floor's time has passed
+                if (floorStairProgress > 0.5) {
+                  isVisible = true;
+                  scaleY = (floorStairProgress - 0.5) * 2.0; // Scale from 0 to 1
+                  elementProgress = scaleY;
+                } else {
+                  isVisible = false;
+                  scaleY = 0.01;
+                  elementProgress = 0;
+                }
+              } else {
+                isVisible = false;
+                scaleY = 0.01;
+                elementProgress = 0;
+              }
+            } else {
+              // DEFAULT LOGIC
+              if (globalProgress >= 1.0) {
+                elementProgress = 1.0;
+              } else if (globalProgress >= phaseEnd) {
+                elementProgress = 1.0;
+              } else if (globalProgress >= phaseStart) {
+                elementProgress = (globalProgress - phaseStart) / (phaseEnd - phaseStart);
+              }
+
+              elementProgress = Math.min(Math.max(elementProgress, 0), 1);
+              isVisible = globalProgress >= phaseStart;
+              scaleY = elementProgress;
             }
-
-            elementProgress = Math.min(Math.max(elementProgress, 0), 1);
-
-            let isVisible = globalProgress >= phaseStart;
-            let scaleY = elementProgress;
 
             // Layer visibility checks
             if (architectState?.layers) {

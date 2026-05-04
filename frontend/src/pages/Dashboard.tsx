@@ -34,7 +34,8 @@ export default function Dashboard() {
        'walls': { visible: true, opacity: 1 },
        'floors': { visible: true, opacity: 1 },
        'mep': { visible: true, opacity: 1 },
-       'facade': { visible: true, opacity: 1 }
+       'facade': { visible: true, opacity: 1 },
+       'stairs': { visible: true, opacity: 1 }
     },
     isolatedLayer: null,
     selectedElementId: null,
@@ -196,6 +197,7 @@ export default function Dashboard() {
         walls:     { visible: true, opacity: active === 'walls'     ? 1 : 0.15 },
         mep:       { visible: true, opacity: 0.08 },
         facade:    { visible: true, opacity: active === 'facade'    ? 1 : 0.15 },
+        stairs:    { visible: true, opacity: active === 'structure' || active === 'floors' ? 1 : 0.15 },
       },
     }));
   }, [pmSimData?.current_stage, user?.role]);
