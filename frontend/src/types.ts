@@ -31,6 +31,7 @@ export interface ArchitectState {
   
   // Design Insights
   designInsights: string[];
+  clashingElementIds?: string[];
   
   // UI Selection
   selectedZone: string | null;
@@ -67,4 +68,6 @@ export interface CivilState {
   appliedSuggestions?: string[];
   heatmapActive?: boolean;
   stressLevels?: Record<string, number>;
+  structuralMaterial?: 'Concrete' | 'Steel' | 'Wood';
+  loadTransferActive?: boolean;
 }

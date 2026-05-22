@@ -1,76 +1,49 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { Upload, Play, Pause, RotateCcw, Layers, LogOut } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSimulation } from '../context/SimulationContext';
-import type { Task, ArchitectState, ParsedModel, CivilState } from '../types';
+import type { Task } from '../types';
 
 import SimulationCanvas from '../components/core/SimulationCanvas';
 import TimelineSlider from '../components/core/TimelineSlider';
 import ArchitectSidebar from '../components/roles/architect/ArchitectSidebar';
 import CivilSidebar from '../components/roles/civil/CivilSidebar';
-import PlannerSidebar from '../components/roles/planner/PlannerSidebar';
 import ManagerSidebar from '../components/roles/manager/ManagerSidebar';
 import ProjectManagerCanvas from '../components/roles/manager/ProjectManagerCanvas';
 import SpeedToggle from '../components/shared/SpeedToggle';
 
 export default function Dashboard() {
   const { user, token, logout } = useAuth();
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [currentDay, setCurrentDay] = useState(0);
-  const [maxDay, setMaxDay] = useState(1);
-  const [simulationStarted, setSimulationStarted] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isConnected, setIsConnected] = useState(true);
-  const [architectState, setArchitectState] = useState<ArchitectState>({
-    materialMode: 'default',
-    sectionCutEnabled: false,
-    sectionCutZ: 0,
-    measuringActive: false,
-    measureDistance: null,
-    sunTime: 12,
-    layers: {
-       'structure': { visible: true, opacity: 1 },
-       'walls': { visible: true, opacity: 1 },
-       'floors': { visible: true, opacity: 1 },
-       'mep': { visible: true, opacity: 1 },
-       'facade': { visible: true, opacity: 1 },
-       'stairs': { visible: true, opacity: 1 }
-    },
-    isolatedLayer: null,
-    selectedElementId: null,
-    elementMaterials: {},
-    designInsights: [],
-    selectedZone: null,
-    selectedZoneArea: null,
-    designVariant: 'A',
-    walkthroughMode: false,
-    layerMode: 'all',
-  });
-  const [civilState, setCivilState] = useState<CivilState>({
-    weakElementIds: [],
-    selectedDependency: null,
-    soilType: 'Sand',
-    windZone: 'Medium',
-    seismicZone: 'Moderate',
-    laborAvailability: 'Medium',
-    materialSupply: 'Stable',
-    optimizationMode: 'Safety',
-    appliedSuggestions: [],
-    heatmapActive: false,
-    stressLevels: {}
-  });
+  const {
+    tasks,
+    setTasks,
+    currentDay,
+    setCurrentDay,
+    maxDay,
+    setMaxDay,
+    simulationStarted,
+    setSimulationStarted,
+    uploadedModel,
+    setUploadedModel,
+    numStories,
+    setNumStories,
+    architectState,
+    setArchitectState,
+    civilState,
+    setCivilState,
+    pmSimData,
+    pmScenario
+  } = useSimulation();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadedModel, setUploadedModel] = useState<ParsedModel | null>(null);
-  const [numStories, setNumStories] = useState(4);
+  const [isConnected, setIsConnected] = useState(true);
   const activeProjectId = 1; // Hardcoded for single-session
 
   const fetchTasks = () => {
     if (!token) return;
     console.log("[Dashboard] Fetching tasks...");
-    setIsLoading(true);
     
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
@@ -94,19 +67,7 @@ export default function Dashboard() {
         clearTimeout(timeoutId);
         console.error('[Dashboard] Task fetch error:', err);
         setIsConnected(false);
-      })
-      .finally(() => {
-        setIsLoading(false);
       });
-  };
-
-  // PM animation state — lifted from ManagerSidebar via callback
-  const [pmSimData, setPmSimData] = useState<any>(null);
-  const [pmScenario, setPmScenario] = useState<any>(null);
-
-  const handlePmSimUpdate = (sim: any, scn: any) => {
-    if (sim) setPmSimData(sim);
-    if (scn) setPmScenario(scn);
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -149,7 +110,7 @@ export default function Dashboard() {
         setUploadedModel(response.data.model_data);
         const maxFloor = Math.max(...response.data.model_data.elements.map((e: any) => Math.floor((e.position[1] || 0) / 3.0)), 0);
         const detectedStories = maxFloor + 1;
-        setNumStories(detectedStories); // FIX: sync state from uploaded model
+        setNumStories(detectedStories); // Sync state from uploaded model
         const totalDuration = 10 + (10 * detectedStories) + (5 * detectedStories) + (10 * detectedStories) + (5 * detectedStories);
         setMaxDay(totalDuration);
         setCurrentDay(0);
@@ -170,13 +131,6 @@ export default function Dashboard() {
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
-
-  // Sync maxDay with PM final_duration when PM simulation updates
-  useEffect(() => {
-    if (user?.role === 'Project Manager' && pmSimData?.final_duration) {
-      setMaxDay(pmSimData.final_duration);
-    }
-  }, [pmSimData?.final_duration, user?.role]);
 
   // 3D layer highlighting — dim inactive layers based on active PM phase
   useEffect(() => {
@@ -200,31 +154,12 @@ export default function Dashboard() {
         stairs:    { visible: true, opacity: active === 'structure' || active === 'floors' ? 1 : 0.15 },
       },
     }));
-  }, [pmSimData?.current_stage, user?.role]);
+  }, [pmSimData?.current_stage, user?.role, setArchitectState]);
 
   useEffect(() => {
     fetchTasks();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
-
-  const { speedMultiplier } = useSimulation();
-
-  useEffect(() => {
-    let interval: any;
-    if (simulationStarted) {
-      const intervalDelay = 300 / speedMultiplier;
-      interval = setInterval(() => {
-        setCurrentDay((prev) => {
-          if (prev >= maxDay) {
-            setSimulationStarted(false);
-            return prev;
-          }
-          return prev + 1;
-        });
-      }, intervalDelay);
-    }
-    return () => clearInterval(interval);
-  }, [simulationStarted, maxDay, speedMultiplier]);
 
   return (
     <div className="w-full h-screen flex flex-col bg-[#0b0c10] text-gray-300 font-sans selection:bg-emerald-500/30">
@@ -306,8 +241,6 @@ export default function Dashboard() {
           </div>
         )}
         
-        {user?.role === 'Construction Planner' && <PlannerSidebar tasks={tasks} currentDay={currentDay} />}
-        
         {/* Center Viewport */}
         <main className="flex-1 relative bg-[#0b0c10] flex flex-col items-center justify-center">
           <TimelineSlider maxDay={maxDay} currentDay={currentDay} setCurrentDay={setCurrentDay} />
@@ -332,17 +265,20 @@ export default function Dashboard() {
           )}
         </main>
 
-        {user?.role === 'Architect' && <ArchitectSidebar architectState={architectState} setArchitectState={setArchitectState} hasModel={!!uploadedModel} />}
-        {user?.role === 'Civil Engineer' && <CivilSidebar tasks={tasks} model={uploadedModel} numStories={numStories} civilState={civilState} setCivilState={setCivilState} />}
-        {user?.role === 'Project Manager' && (
-          <ManagerSidebar 
-            currentDay={currentDay} 
+        {user?.role === 'Architect' && <ArchitectSidebar architectState={architectState} setArchitectState={setArchitectState} hasModel={!!uploadedModel} uploadedModel={uploadedModel} />}
+        {user?.role === 'Civil Engineer' && (
+          <CivilSidebar 
+            tasks={tasks} 
+            model={uploadedModel} 
             numStories={numStories} 
-            uploadedModel={uploadedModel} 
-            onSimUpdate={handlePmSimUpdate}
-            activeProjectId={activeProjectId}
-            triggerRefresh={uploadedModel}
+            civilState={civilState} 
+            setCivilState={setCivilState} 
+            currentDay={currentDay}
+            maxDay={maxDay}
           />
+        )}
+        {user?.role === 'Project Manager' && (
+          <ManagerSidebar />
         )}
 
       </div>

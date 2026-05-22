@@ -110,7 +110,6 @@ export default function Register() {
               className="w-full bg-[#1a1d24] border border-gray-700 rounded p-3 text-white focus:outline-none focus:border-emerald-500 transition-colors appearance-none cursor-pointer"
             >
               <option value="Project Manager">Project Manager</option>
-              <option value="Construction Planner">Construction Planner</option>
               <option value="Architect">Architect</option>
               <option value="Civil Engineer">Civil Engineer</option>
             </select>
