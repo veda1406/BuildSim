@@ -6,3 +6,4 @@ node_modules/
 .env
 *.db
 backend/*.db
+buildsim.db
