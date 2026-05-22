@@ -3,8 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base, SessionLocal
 import models
 
-# Create the database tables
-Base.metadata.drop_all(bind=engine)
+# Ensure tables exist, but do NOT drop them to preserve data
 Base.metadata.create_all(bind=engine)
 
 # Ensure a default project exists for the single-session model

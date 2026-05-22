@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Box, PointerLockControls, useTexture } from '@react-three/drei';
 import type { Task, ArchitectState, ParsedModel } from '../../types';
+import { generateBuildingMetrics, generateInsights } from '../../utils/geometryAnalysis';
 
 interface SimulationCanvasProps {
   tasks: Task[];
@@ -81,7 +82,8 @@ const BuildingBlock = ({
   clippingPlanes,
   onClick,
   isSelected,
-  scaleY = 1
+  scaleY = 1,
+  isLoadTransferHighlight = false
 }: any) => {
   let roughness = 0.5;
   let metalness = 0.1;
@@ -136,6 +138,19 @@ const BuildingBlock = ({
     wireframe = true;
   }
 
+  // Load Transfer Animation Highlight
+  let emissiveColor = '#000000';
+  let emissiveIntensity = 0;
+  if (isLoadTransferHighlight) {
+    roughness = 0.2;
+    metalness = 0.5;
+    mapColor = '#3b82f6';
+    emissiveColor = '#3b82f6';
+    emissiveIntensity = 1.8;
+    curOpacity = Math.max(0.9, curOpacity);
+    transparent = true;
+  }
+
   if (textureMap && textureMap.wrapS !== THREE.RepeatWrapping) {
     textureMap.wrapS = THREE.RepeatWrapping;
     textureMap.wrapT = THREE.RepeatWrapping;
@@ -173,6 +188,8 @@ const BuildingBlock = ({
             clippingPlanes={clippingPlanes}
             side={THREE.DoubleSide}
             wireframe={wireframe}
+            emissive={emissiveColor}
+            emissiveIntensity={emissiveIntensity}
           />
         ) : (
           <meshStandardMaterial
@@ -185,6 +202,8 @@ const BuildingBlock = ({
             clippingPlanes={clippingPlanes}
             side={THREE.DoubleSide}
             wireframe={wireframe}
+            emissive={emissiveColor}
+            emissiveIntensity={emissiveIntensity}
           />
         )}
       </Box>
@@ -194,46 +213,77 @@ const BuildingBlock = ({
 
 export default function SimulationCanvas({ tasks, currentDay, architectState, setArchitectState, civilState, uploadedModel, maxDay }: SimulationCanvasProps) {
   const [measurePoints, setMeasurePoints] = useState<THREE.Vector3[]>([]);
+  const [animTime, setAnimTime] = useState(0);
+
+  // Load Transfer Animation ticker
+  useEffect(() => {
+    if (civilState?.loadTransferActive) {
+      let animFrameId: number;
+      const tick = () => {
+        setAnimTime(Date.now());
+        animFrameId = requestAnimationFrame(tick);
+      };
+      animFrameId = requestAnimationFrame(tick);
+      return () => cancelAnimationFrame(animFrameId);
+    }
+  }, [civilState?.loadTransferActive]);
 
   // Design Insights Effect
   useEffect(() => {
-    if (uploadedModel && setArchitectState) {
-       const insights: string[] = [];
-       let smallRooms = 0;
-       
-       uploadedModel.elements.forEach((el) => {
-          if (el.room_type === 'washroom' || el.room_type === 'bedroom') {
-            const area = el.size[0] * el.size[2];
-            if (area < 8.0) smallRooms++;
-          }
-       });
-       
-       // Lightweight BBox Intersection (Simulating clash detection on first 50 elements)
-       let clashCount = 0;
-       const boxes = uploadedModel.elements.map(el => {
-         const m = new THREE.Box3();
-         m.setFromCenterAndSize(
+    if (uploadedModel && setArchitectState && architectState) {
+       // 1. Dynamic MEP-to-Structure BBox Clash Detection
+       const clashingIds: string[] = [];
+       const structuralEls = uploadedModel.elements.filter(
+         el => el.layer === 'structure' || el.type === 'column' || el.type === 'core' || el.type === 'wall' || el.layer === 'walls'
+       );
+       const mepEls = uploadedModel.elements.filter(
+         el => el.layer === 'mep' || el.type === 'duct'
+       );
+
+       const structBoxes = structuralEls.map(el => ({
+         id: el.id,
+         box: new THREE.Box3().setFromCenterAndSize(
            new THREE.Vector3(...el.position),
            new THREE.Vector3(...el.size)
-         );
-         return m;
+         )
+       }));
+
+       const mepBoxes = mepEls.map(el => ({
+         id: el.id,
+         floor: Math.max(0, Math.floor((el.position[1] || 0) / 3.0)),
+         box: new THREE.Box3().setFromCenterAndSize(
+           new THREE.Vector3(...el.position),
+           new THREE.Vector3(...el.size)
+         )
+       }));
+
+       const floorClashes: Record<number, number> = {};
+
+       mepBoxes.forEach(mep => {
+         structBoxes.forEach(str => {
+           if (mep.box.intersectsBox(str.box)) {
+             clashingIds.push(mep.id);
+             clashingIds.push(str.id);
+             floorClashes[mep.floor] = (floorClashes[mep.floor] || 0) + 1;
+           }
+         });
        });
 
-       for (let i=0; i<Math.min(boxes.length, 50); i++) {
-         for (let j=i+1; j<Math.min(boxes.length, 50); j++) {
-           if (boxes[i].intersectsBox(boxes[j])) {
-              clashCount++;
-           }
-         }
-       }
-       
-       if (smallRooms > 0) insights.push(`[MEDIUM] Warning: ${smallRooms} tight spatial clearances detected (Area < 8sqm).`);
-       if (clashCount > 5) insights.push(`[HIGH] Analysis: High geometric clash density detected (${clashCount} overlaps) within model.`);
-       insights.push("[LOW] Natural light analysis complete: Core daylight exposure is nominal.");
-       
-       setArchitectState(prev => ({ ...prev, designInsights: insights }));
+       const clashesCount = clashingIds.length / 2;
+
+       // 2. Generate Building Metrics Deterministically
+       const metrics = generateBuildingMetrics(uploadedModel);
+
+       // 3. Generate Rule-based Insights procedurally
+       const insights = generateInsights(metrics, architectState, currentDay, maxDay, clashesCount, floorClashes);
+
+       setArchitectState(prev => ({ 
+         ...prev, 
+         designInsights: insights,
+         clashingElementIds: clashingIds 
+       }));
     }
-  }, [uploadedModel, setArchitectState, architectState?.sunTime, currentDay]);
+  }, [uploadedModel, setArchitectState, architectState?.sunTime, currentDay, architectState?.materialMode, architectState?.elementMaterials]);
 
   // Sun calculations based on time (0-24)
   const sunTime = architectState?.sunTime ?? 12;
@@ -305,51 +355,115 @@ export default function SimulationCanvas({ tasks, currentDay, architectState, se
         </mesh>
 
         {uploadedModel ? (() => {
-          const totalSimDays = maxDay || 100;
+          const material = civilState?.structuralMaterial || 'Concrete';
+          let speedModifier = 1.0;
+          if (material === 'Concrete') speedModifier = 1.35;
+          else if (material === 'Steel') speedModifier = 0.70;
+          else if (material === 'Wood') speedModifier = 0.85;
+
+          const totalSimDays = (maxDay || 100) * speedModifier;
           const globalProgress = Math.min(Math.max(currentDay / totalSimDays, 0), 1);
           const maxFloor = Math.max(...uploadedModel.elements.map(e => Math.floor((e.position[1] || 0) / 3.0)), 0);
 
           return uploadedModel.elements.map((el, index) => {
-            const floorIndex = Math.floor((el.position[1] || 0) / 3.0);
+            const floorIndex = Math.max(0, Math.floor((el.position[1] || 0) / 3.0));
 
             // Phase mapping
             let phaseStart = 0;
             let phaseEnd = 1;
-            let isFoundation = (el.type === 'slab' && floorIndex === 0);
-            let isStructure = (el.layer === 'structure' || el.type === 'column' || el.type === 'core' || el.layer === 'walls' || el.type === 'wall');
-            let isRoofing = (el.type === 'slab' && floorIndex > 0);
-            let isFinishing = (el.layer === 'mep' || el.layer === 'facade' || el.type === 'stair' || el.type === 'lift' || el.type === 'duct');
+
+            let isFoundation = (el.type === 'slab' && el.position[1] < 1.0);
+            let isColumn = (el.type === 'column');
+            let isFrame = (el.layer === 'structure' || el.type === 'core' || el.layer === 'walls' || el.type === 'wall') && el.type !== 'column' && el.type !== 'slab';
+            let isRoofing = (el.type === 'slab' && el.position[1] >= 1.0);
+            let isStair = (el.type === 'stair' || (el.layer && el.layer.toLowerCase().includes('stair')));
+            let isFinishing = (!isStair && (el.layer === 'mep' || el.layer === 'facade' || el.type === 'lift' || el.type === 'duct'));
+
+            const totalFloors = maxFloor + 1;
+            const superstructureStart = 0.10;
+            const superstructureEnd = 0.85;
+            const superstructureDuration = superstructureEnd - superstructureStart;
+            const floorStep = superstructureDuration / totalFloors;
 
             if (isFoundation) {
               phaseStart = 0.0;
-              phaseEnd = 0.25;
-            } else if (isStructure) {
-              // Structure is staggered by floor within its phase (25-60%)
-              const floorStep = 0.35 / (maxFloor + 1);
-              phaseStart = 0.25 + (floorIndex * floorStep);
-              phaseEnd = phaseStart + floorStep;
+              phaseEnd = superstructureStart;
+            } else if (isColumn) {
+              const floorStart = superstructureStart + floorIndex * floorStep;
+              phaseStart = floorStart;
+              phaseEnd = floorStart + floorStep * 0.35;
+            } else if (isFrame) {
+              const floorStart = superstructureStart + floorIndex * floorStep;
+              phaseStart = floorStart + floorStep * 0.35;
+              phaseEnd = floorStart + floorStep * 0.75;
             } else if (isRoofing) {
-              phaseStart = 0.60;
-              phaseEnd = 0.85;
+              const floorStart = superstructureStart + floorIndex * floorStep;
+              phaseStart = floorStart + floorStep * 0.75;
+              phaseEnd = floorStart + floorStep;
             } else if (isFinishing) {
-              phaseStart = 0.85;
+              phaseStart = superstructureEnd;
               phaseEnd = 1.0;
             }
 
             // Calculate element progress
             let elementProgress = 0;
-            if (globalProgress >= 1.0) {
+            let isVisible = false;
+            let scaleY = 1.0;
+
+            if (isStair) {
+              // STAIRS RENDERING LOGIC
+              // Map the stair progress alongside the main construction phases (superstructureStart - superstructureEnd)
+              const stairPhaseStart = superstructureStart;
+              const stairPhaseEnd = superstructureEnd;
+              const totalFloors = maxFloor + 1;
+              
+              let stairGlobalProgress = 0;
+              if (globalProgress >= stairPhaseEnd) stairGlobalProgress = 1.0;
+              else if (globalProgress > stairPhaseStart) stairGlobalProgress = (globalProgress - stairPhaseStart) / (stairPhaseEnd - stairPhaseStart);
+
+              const totalStairProgress = stairGlobalProgress * totalFloors;
+              const currentStairFloor = Math.floor(totalStairProgress);
+              const floorStairProgress = totalStairProgress - currentStairFloor;
+
+              if (floorIndex < currentStairFloor) {
+                isVisible = true;
+                scaleY = 1.0;
+                elementProgress = 1.0;
+              } else if (floorIndex === currentStairFloor) {
+                // Slab dependency: stairs begin appearing after 50% of the floor's time has passed
+                if (floorStairProgress > 0.5) {
+                  isVisible = true;
+                  scaleY = (floorStairProgress - 0.5) * 2.0; // Scale from 0 to 1
+                  elementProgress = scaleY;
+                } else {
+                  isVisible = false;
+                  scaleY = 0.01;
+                  elementProgress = 0;
+                }
+              } else {
+                isVisible = false;
+                scaleY = 0.01;
+                elementProgress = 0;
+              }
+            } else if (isFoundation) {
+              // Foundation starts fully built at Day 0, providing a stable visual baseline
               elementProgress = 1.0;
-            } else if (globalProgress >= phaseEnd) {
-              elementProgress = 1.0;
-            } else if (globalProgress >= phaseStart) {
-              elementProgress = (globalProgress - phaseStart) / (phaseEnd - phaseStart);
+              isVisible = true;
+              scaleY = 1.0;
+            } else {
+              // DEFAULT LOGIC
+              if (globalProgress >= 1.0) {
+                elementProgress = 1.0;
+              } else if (globalProgress >= phaseEnd) {
+                elementProgress = 1.0;
+              } else if (globalProgress >= phaseStart) {
+                elementProgress = (globalProgress - phaseStart) / (phaseEnd - phaseStart);
+              }
+
+              elementProgress = Math.min(Math.max(elementProgress, 0), 1);
+              isVisible = globalProgress >= phaseStart;
+              scaleY = elementProgress;
             }
-
-            elementProgress = Math.min(Math.max(elementProgress, 0), 1);
-
-            let isVisible = globalProgress >= phaseStart;
-            let scaleY = elementProgress;
 
             // Layer visibility checks
             if (architectState?.layers) {
@@ -359,20 +473,34 @@ export default function SimulationCanvas({ tasks, currentDay, architectState, se
               if (architectState.isolatedLayer && architectState.isolatedLayer !== elLayer) isVisible = false;
             }
 
-            // Construction Color Logic
-            let color = el.color;
-            if (civilState?.heatmapActive && civilState?.stressLevels?.[el.id!]) {
-              const stress = civilState.stressLevels[el.id!];
-              if (stress > 0.8) color = '#e50a0aff'; // Red
-              else if (stress > 0.6) color = '#d76615ff'; // Orange
-              else if (stress > 0.4) color = '#eab308'; // Yellow
-              else color = '#31ac5eff'; // Green
-            } else if (elementProgress > 0 && elementProgress < 1.0) {
-              color = '#b9a651ff'; // Construction Yellow
-            }
+             // Construction Color Logic
+             let color = el.color;
+             const isClash = architectState?.clashingElementIds?.includes(el.id);
+             if (isClash) {
+               color = '#ef4444'; // Red highlight for clash
+             } else if (civilState?.heatmapActive && civilState?.stressLevels?.[el.id!]) {
+               const stress = civilState.stressLevels[el.id!];
+               if (stress >= 0.75) color = '#ef4444'; // Red
+               else if (stress > 0.4) color = '#eab308'; // Yellow
+               else color = '#22c55e'; // Green
+             } else if (elementProgress > 0 && elementProgress < 1.0) {
+               color = '#b9a651'; // Construction Yellow
+             }
 
             const matMode = architectState?.elementMaterials?.[el.id!] || architectState?.materialMode || 'default';
             const isSelected = architectState?.selectedElementId === el.id || civilState?.weakElementIds?.includes(el.id!);
+
+            // Load Transfer Highlight calculation
+            const isLoadTransferActive = civilState?.loadTransferActive;
+            let isLoadTransferHighlight = false;
+            if (isLoadTransferActive) {
+              const time = (animTime / 800) % 4; // 3.2s cycle
+              const stage = Math.floor(time);
+              if (stage === 0 && isRoofing) isLoadTransferHighlight = true;
+              else if (stage === 1 && isFrame) isLoadTransferHighlight = true;
+              else if (stage === 2 && isColumn) isLoadTransferHighlight = true;
+              else if (stage === 3 && isFoundation) isLoadTransferHighlight = true;
+            }
 
             return (
               <BuildingBlock
@@ -390,6 +518,7 @@ export default function SimulationCanvas({ tasks, currentDay, architectState, se
                 isSelected={isSelected}
                 scaleY={scaleY}
                 onClick={(e: any) => handleBlockClick(e, el.id || String(index))}
+                isLoadTransferHighlight={isLoadTransferHighlight}
              />
           );
         });

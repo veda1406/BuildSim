@@ -81,7 +81,7 @@ def create_dependency(dep: schemas.DependencyCreate, db: Session = Depends(get_d
     return dep
 
 @router.post("/simulate", response_model=List[schemas.TaskResponse])
-def run_simulation(db: Session = Depends(get_db), current_user: models.User = Depends(auth_utils.require_role(["Project Manager", "Construction Planner", "Civil Engineer"]))):
+def run_simulation(db: Session = Depends(get_db), current_user: models.User = Depends(auth_utils.require_role(["Project Manager", "Civil Engineer"]))):
     tasks = db.query(models.Task).all()
     deps = db.query(models.Dependency).all()
     

@@ -1,152 +1,31 @@
-import { useState, useEffect } from 'react';
-import axios from 'axios';
-import { Sparkles, Activity, AlertTriangle, DollarSign, CheckCircle, Zap } from 'lucide-react';
-import type { ParsedModel } from '../../../types';
-
-interface SimulationData {
-  base_duration: number;
-  total_delay: number;
-  final_duration: number;
-  current_stage: string;
-  stages: { name: string; start: number; end: number }[];
-}
-
-interface ScenarioResult2 {
-  built_area: number;
-  base_duration_days: number;
-  base_cost: number;
-  base_workers: number;
-  final_duration: number;
-  final_cost: number;
-  delta_duration: number;
-  delta_cost: number;
-}
-
-interface ManagerSidebarProps {
-  currentDay: number;
-  numStories?: number;
-  uploadedModel?: ParsedModel | null;
-  onSimUpdate?: (simData: SimulationData | null, scenario: ScenarioResult2 | null) => void;
-  activeProjectId?: number;
-  triggerRefresh?: any;
-}
-
-interface Stage {
-  name: string;
-  start: number;
-  end: number;
-}
-
-interface CostData {
-  structure_cost: number;
-  wall_cost: number;
-  facade_cost: number;
-  mep_cost: number;
-  total_cost: number;
-}
-
-interface ScenarioResult {
-  built_area: number;
-  base_duration_days: number;
-  base_cost: number;
-  base_workers: number;
-  final_duration: number;
-  final_cost: number;
-  delta_duration: number;
-  delta_cost: number;
-}
-
-/** Estimate floor footprint bounding-box area (sqm) from model ground elements */
-function estimateAreaFromModel(model: ParsedModel): number {
-  const groundElements = model.elements.filter(e => e.position[1] < 4.0);
-  if (groundElements.length === 0) return 1000;
-  const xs = groundElements.flatMap(e => [e.position[0] - e.size[0] / 2, e.position[0] + e.size[0] / 2]);
-  const zs = groundElements.flatMap(e => [e.position[2] - e.size[2] / 2, e.position[2] + e.size[2] / 2]);
-  const area = (Math.max(...xs) - Math.min(...xs)) * (Math.max(...zs) - Math.min(...zs));
-  return Math.max(Math.round(area), 50);
-}
+import { Sparkles, Activity, DollarSign, CheckCircle, Zap } from 'lucide-react';
+import { useSimulation } from '../../../context/SimulationContext';
 
 const fmt = (n: number) => '₹' + n.toLocaleString('en-IN');
 const fmtDays = (n: number) => `${n > 0 ? '+' : ''}${n.toFixed(1)} days`;
 
-export default function ManagerSidebar({ currentDay, numStories = 4, uploadedModel, onSimUpdate, activeProjectId, triggerRefresh }: ManagerSidebarProps) {
+export default function ManagerSidebar() {
+  const {
+    currentDay,
+    uploadedModel,
+    numStories,
+    weatherDelay,
+    setWeatherDelay,
+    materialDelay,
+    setMaterialDelay,
+    workers,
+    setWorkers,
+    budgetMult,
+    setBudgetMult,
+    area,
+    setArea,
+    pmSimData: simData,
+    pmScenario: scenario,
+    costData
+  } = useSimulation();
+
   const isModelLoaded = !!uploadedModel;
-
-  // ── Area (auto or manual) ──────────────────────────────────────────────────
-  const [area, setArea] = useState(1000);
-  useEffect(() => {
-    if (uploadedModel) setArea(estimateAreaFromModel(uploadedModel));
-  }, [uploadedModel]);
-
-  // ── Scenario knobs ─────────────────────────────────────────────────────────
-  const [workers, setWorkers]           = useState(20);
-  const [budgetMult, setBudgetMult]     = useState(1.0);
-  const [weatherDelay, setWeatherDelay] = useState(0);
-  const [materialDelay, setMaterialDelay] = useState(0);
-
-  // ── API state ──────────────────────────────────────────────────────────────
-  const [simData, setSimData]       = useState<SimulationData | null>(null);
-  const [costData, setCostData]     = useState<CostData | null>(null);
-  const [scenario, setScenario]     = useState<ScenarioResult | null>(null);
-
-  // Sync workers slider max / default to base_workers from scenario
   const baseWorkers = scenario?.base_workers ?? 20;
-
-  // ── Fetch Gantt timeline ───────────────────────────────────────────────────
-  useEffect(() => {
-    const run = async () => {
-      try {
-        const res = await axios.post('http://127.0.0.1:8000/project/simulate-timeline', {
-          floors: numStories,
-          area,
-          weather_delay: Math.round(weatherDelay),
-          material_delay: Math.round(materialDelay),
-          labor_delay: 0,
-          elapsed_day: currentDay,
-        });
-        setSimData(res.data);
-        if (onSimUpdate) onSimUpdate(res.data, scenario);
-      } catch (e) { console.error('timeline', e); }
-    };
-    run();
-  }, [weatherDelay, materialDelay, currentDay, numStories, area]);
-
-  // ── Fetch cost breakdown ───────────────────────────────────────────────────
-  useEffect(() => {
-    const run = async () => {
-      try {
-        const res = await axios.post('http://127.0.0.1:8000/project/calculate-cost', { floors: numStories, area });
-        setCostData(res.data);
-      } catch (e) { console.error('cost', e); }
-    };
-    run();
-  }, [numStories, area]);
-
-  // ── Fetch what-if scenario ─────────────────────────────────────────────────
-  useEffect(() => {
-    const run = async () => {
-      try {
-        const res = await axios.post('http://127.0.0.1:8000/project/simulate-scenario', {
-          footprint_area: area,
-          number_of_floors: numStories,
-          workers,
-          budget_multiplier: budgetMult,
-          delay_weather_days: weatherDelay,
-          delay_material_days: materialDelay,
-        });
-        setScenario(res.data);
-        if (onSimUpdate) onSimUpdate(simData, res.data);
-      } catch (e) { console.error('scenario', e); }
-    };
-    run();
-  }, [area, numStories, workers, budgetMult, weatherDelay, materialDelay]);
-
-  // Sync workers to base when model/area changes
-  useEffect(() => {
-    if (scenario) setWorkers(Math.round(scenario.base_workers));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scenario?.base_workers]);
-
   const totalDelay = (weatherDelay + materialDelay);
 
   return (
@@ -240,7 +119,7 @@ export default function ManagerSidebar({ currentDay, numStories = 4, uploadedMod
           <span className="text-white font-bold text-sm">{simData?.current_stage ?? 'N/A'}</span>
         </div>
         <div className="w-full h-8 bg-[#0b0c10] rounded-lg overflow-hidden flex relative border border-gray-800">
-          {simData?.stages.map((stage, idx) => {
+          {simData?.stages.map((stage: any, idx: number) => {
             const w = simData.final_duration > 0 ? ((stage.end - stage.start) / simData.final_duration) * 100 : 0;
             const active = currentDay >= stage.start && currentDay < stage.end;
             const colors = ['bg-blue-500', 'bg-indigo-500', 'bg-purple-500', 'bg-pink-500', 'bg-emerald-500'];
@@ -260,7 +139,7 @@ export default function ManagerSidebar({ currentDay, numStories = 4, uploadedMod
           <span>Day {simData?.final_duration ?? 0}</span>
         </div>
         <div className="flex flex-wrap gap-x-3 gap-y-1.5">
-          {simData?.stages.map((s, idx) => {
+          {simData?.stages.map((s: any, idx: number) => {
             const colors = ['bg-blue-500', 'bg-indigo-500', 'bg-purple-500', 'bg-pink-500', 'bg-emerald-500'];
             return (
               <span key={s.name} className="flex items-center gap-1 text-[0.6rem] font-bold text-gray-400">

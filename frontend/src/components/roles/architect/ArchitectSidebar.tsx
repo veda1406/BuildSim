@@ -1,16 +1,88 @@
 import { Layers, Box as BoxIcon, Scissors, Ruler, Camera, BarChart2, Eye, EyeOff } from 'lucide-react';
-import type { ArchitectState } from '../../../types';
+import type { ArchitectState, ParsedModel } from '../../../types';
 
 interface ArchitectSidebarProps {
   architectState: ArchitectState;
   setArchitectState: React.Dispatch<React.SetStateAction<ArchitectState>>;
   hasModel?: boolean;
+  uploadedModel?: ParsedModel | null;
 }
 
-export default function ArchitectSidebar({ architectState, setArchitectState, hasModel }: ArchitectSidebarProps) {
+export default function ArchitectSidebar({ architectState, setArchitectState, hasModel, uploadedModel }: ArchitectSidebarProps) {
   const updateState = (updates: Partial<ArchitectState>) => {
     setArchitectState(prev => ({ ...prev, ...updates }));
   };
+
+  // Math calculations to dynamically derive metrics
+  let concreteCount = 0;
+  let woodCount = 0;
+  let glassCount = 0;
+  let defaultCount = 0;
+
+  if (uploadedModel) {
+    uploadedModel.elements.forEach(el => {
+      const mat = architectState.elementMaterials?.[el.id] || architectState.materialMode || 'default';
+      if (mat === 'concrete') concreteCount++;
+      else if (mat === 'wood') woodCount++;
+      else if (mat === 'glass') glassCount++;
+      else defaultCount++;
+    });
+  } else {
+    // Fallback if no model uploaded yet
+    const values = Object.values(architectState.elementMaterials || {});
+    values.forEach(mat => {
+      if (mat === 'concrete') concreteCount++;
+      else if (mat === 'wood') woodCount++;
+      else if (mat === 'glass') glassCount++;
+      else defaultCount++;
+    });
+    if (architectState.materialMode === 'concrete') concreteCount = 10;
+    else if (architectState.materialMode === 'wood') woodCount = 10;
+    else if (architectState.materialMode === 'glass') glassCount = 10;
+  }
+
+  const totalCount = concreteCount + woodCount + glassCount + defaultCount || 1;
+  const woodRatio = woodCount / totalCount;
+  const concreteRatio = concreteCount / totalCount;
+  const glassRatio = glassCount / totalCount;
+
+  // 1. sustainScore (baseline 60% modified by Wood elements vs Concrete elements)
+  const sustainScore = Math.min(100, Math.max(0, Math.round(60 + (woodRatio * 40) - (concreteRatio * 20))));
+
+  // 2. thermalScore (baseline 50% modified by Concrete elements vs Wood/Glass elements)
+  const thermalScore = Math.min(100, Math.max(0, Math.round(50 + (concreteRatio * 50) - (woodRatio * 15) - (glassRatio * 10))));
+
+  // 3. costPremium (standard concrete vs +20% Wood premium and +35% Glass premium)
+  const costPremium = Math.max(0, Math.round((woodRatio * 20) + (glassRatio * 35)));
+
+  // 4. daylightQuality (Noon 450 Lux vs Dusk/Dawn/Night)
+  const sunTime = architectState.sunTime;
+  let daylightQuality = "50 Lux (Minimal)";
+  if (sunTime >= 10 && sunTime <= 14) {
+    daylightQuality = "450 Lux (Excellent)";
+  } else if ((sunTime >= 6 && sunTime < 10) || (sunTime > 14 && sunTime <= 18)) {
+    daylightQuality = "280 Lux (Good)";
+  } else {
+    daylightQuality = "50 Lux (Minimal)";
+  }
+
+  // 5. thermalRetention ("Radiating" overnight vs "Absorbing" daytime)
+  let thermalRetention = "Heat Absorption Active";
+  if (sunTime < 6 || sunTime > 18) {
+    thermalRetention = "Nighttime Dissipation Active";
+  } else {
+    thermalRetention = "Solar Core Charging Active";
+  }
+
+  // 6. shadowState ("Direct vertical cast", "Angled horizontal cast", "Ambient shadow mapping")
+  let shadowState = "Ambient shadow mapping";
+  if (sunTime >= 10 && sunTime <= 14) {
+    shadowState = "Direct vertical cast";
+  } else if ((sunTime >= 6 && sunTime < 10) || (sunTime > 14 && sunTime <= 18)) {
+    shadowState = "Angled horizontal cast";
+  } else {
+    shadowState = "Ambient shadow mapping";
+  }
 
   return (
     <aside className="w-[23rem] z-20 border-l border-gray-800 bg-[#121419] flex flex-col p-6 overflow-y-auto gap-6 shadow-2xl justify-start items-center">
@@ -189,6 +261,77 @@ export default function ArchitectSidebar({ architectState, setArchitectState, ha
            {architectState.walkthroughMode && <span className="text-[0.6rem] text-indigo-400 text-center">Use WASD to move, esc to unlock.</span>}
          </div>
        )}
+
+        {/* Material Performance Analysis */}
+        <div className="w-full bg-[#161921] border border-gray-800 p-5 rounded-xl shadow-lg flex flex-col gap-4">
+          <span className="text-[0.6rem] text-gray-500 tracking-widest uppercase font-bold flex items-center gap-2">
+            <BarChart2 className="w-3 h-3 text-emerald-500" /> Material Performance Analysis
+          </span>
+          <div className="flex flex-col gap-3">
+            {/* Sustainability Score */}
+            <div className="flex flex-col gap-1">
+              <div className="flex justify-between text-[0.65rem] font-bold">
+                <span className="text-gray-300">Sustainability Score</span>
+                <span className="text-emerald-400">{sustainScore}%</span>
+              </div>
+              <div className="w-full h-2 bg-[#0b0c10] border border-gray-800 rounded overflow-hidden">
+                <div 
+                  className="h-full bg-emerald-500 transition-all duration-500 rounded" 
+                  style={{ width: `${sustainScore}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Thermal Mass Capacity */}
+            <div className="flex flex-col gap-1">
+              <div className="flex justify-between text-[0.65rem] font-bold">
+                <span className="text-gray-300">Thermal Mass Capacity</span>
+                <span className="text-amber-400">{thermalScore}%</span>
+              </div>
+              <div className="w-full h-2 bg-[#0b0c10] border border-gray-800 rounded overflow-hidden">
+                <div 
+                  className="h-full bg-amber-500 transition-all duration-500 rounded" 
+                  style={{ width: `${thermalScore}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Cost Premium Impact */}
+            <div className="flex flex-col gap-1">
+              <div className="flex justify-between text-[0.65rem] font-bold">
+                <span className="text-gray-300">Est. Cost Impact Premium</span>
+                <span className="text-indigo-400">+{costPremium}%</span>
+              </div>
+              <div className="w-full h-2 bg-[#0b0c10] border border-gray-800 rounded overflow-hidden">
+                <div 
+                  className="h-full bg-indigo-500 transition-all duration-500 rounded" 
+                  style={{ width: `${costPremium}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Environmental Analysis */}
+        <div className="w-full bg-[#161921] border border-gray-800 p-5 rounded-xl shadow-lg flex flex-col gap-4">
+          <span className="text-[0.6rem] text-gray-500 tracking-widest uppercase font-bold flex items-center gap-2">
+            <span className="text-amber-500 font-bold text-xs">☀</span> Environmental Analysis
+          </span>
+          <div className="flex flex-col gap-3 bg-[#0b0c10]/50 p-3 border border-gray-800 rounded-lg">
+            <div className="flex justify-between items-center text-[0.65rem] border-b border-gray-800/60 pb-2">
+              <span className="text-gray-400 font-medium">Daylight Quality</span>
+              <span className="text-white font-bold">{daylightQuality}</span>
+            </div>
+            <div className="flex justify-between items-center text-[0.65rem] border-b border-gray-800/60 pb-2">
+              <span className="text-gray-400 font-medium">Thermal Retention</span>
+              <span className="text-white font-bold">{thermalRetention}</span>
+            </div>
+            <div className="flex justify-between items-center text-[0.65rem]">
+              <span className="text-gray-400 font-medium">Shadow State</span>
+              <span className="text-white font-bold">{shadowState}</span>
+            </div>
+          </div>
+        </div>
 
        {/* Design Insights Box */}
        <div className="w-full bg-[#161921] border border-gray-800 p-5 rounded-xl shadow-lg flex flex-col gap-3">
