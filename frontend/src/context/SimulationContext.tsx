@@ -173,6 +173,10 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           material_delay: Math.round(materialDelay),
           labor_delay: 0,
           elapsed_day: currentDay,
+          simulation_speed: speedMultiplier,
+          playback_state: simulationStarted ? "playing" : "paused",
+          structural_material: civilState?.structuralMaterial || "Concrete",
+          uploadedModel: uploadedModel,
         });
         setPmSimData(res.data);
       } catch (e) {
@@ -180,7 +184,7 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }
     };
     run();
-  }, [weatherDelay, materialDelay, currentDay, numStories, area]);
+  }, [weatherDelay, materialDelay, currentDay, numStories, area, speedMultiplier, simulationStarted, civilState?.structuralMaterial, uploadedModel]);
 
   // Sync cost breakdown calculations
   useEffect(() => {

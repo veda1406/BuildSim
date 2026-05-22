@@ -16,7 +16,7 @@ export default function TimelineSlider({ maxDay, currentDay, setCurrentDay }: Ti
         </div>
         <div className="bg-[#121419]/90 border border-gray-800 p-3 rounded-lg backdrop-blur-md shadow-xl w-48">
           <span className="text-[0.6rem] text-gray-500 tracking-widest uppercase font-bold block mb-1">Elapsed Time</span>
-          <span className="text-white font-bold tracking-widest text-sm">DAY {currentDay}</span>
+          <span className="text-white font-bold tracking-widest text-sm">DAY {currentDay} / {maxDay}</span>
         </div>
       </div>
       

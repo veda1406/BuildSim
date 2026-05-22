@@ -4,6 +4,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Box, PointerLockControls, useTexture } from '@react-three/drei';
 import type { Task, ArchitectState, ParsedModel } from '../../types';
 import { generateBuildingMetrics, generateInsights } from '../../utils/geometryAnalysis';
+import { useSimulation } from '../../context/SimulationContext';
 
 interface SimulationCanvasProps {
   tasks: Task[];
@@ -212,6 +213,7 @@ const BuildingBlock = ({
 };
 
 export default function SimulationCanvas({ tasks, currentDay, architectState, setArchitectState, civilState, uploadedModel, maxDay }: SimulationCanvasProps) {
+  const { pmSimData } = useSimulation();
   const [measurePoints, setMeasurePoints] = useState<THREE.Vector3[]>([]);
   const [animTime, setAnimTime] = useState(0);
 
@@ -355,114 +357,105 @@ export default function SimulationCanvas({ tasks, currentDay, architectState, se
         </mesh>
 
         {uploadedModel ? (() => {
-          const material = civilState?.structuralMaterial || 'Concrete';
-          let speedModifier = 1.0;
-          if (material === 'Concrete') speedModifier = 1.35;
-          else if (material === 'Steel') speedModifier = 0.70;
-          else if (material === 'Wood') speedModifier = 0.85;
-
-          const totalSimDays = (maxDay || 100) * speedModifier;
-          const globalProgress = Math.min(Math.max(currentDay / totalSimDays, 0), 1);
           const maxFloor = Math.max(...uploadedModel.elements.map(e => Math.floor((e.position[1] || 0) / 3.0)), 0);
+          const totalFloors = maxFloor + 1;
+
+          // Retrieve dynamic stage bounds calculated on backend
+          const stages = pmSimData?.stages || [];
+          const foundationStage = stages.find((s: any) => s.name === 'Foundation');
+          const structureStage = stages.find((s: any) => s.name === 'Structure');
+          const floorsStage = stages.find((s: any) => s.name === 'Floors');
+          const wallsStage = stages.find((s: any) => s.name === 'Walls');
+          const facadeStage = stages.find((s: any) => s.name === 'Facade');
+
+          const foundationStart = foundationStage ? foundationStage.start : 0;
+          const foundationEnd = foundationStage ? foundationStage.end : maxDay * 0.10;
+
+          const structureStart = structureStage ? structureStage.start : foundationEnd;
+          const floorsEnd = floorsStage ? floorsStage.end : maxDay * 0.70;
+
+          const wallsStart = wallsStage ? wallsStage.start : floorsEnd;
+          const wallsEnd = wallsStage ? wallsStage.end : maxDay * 0.85;
+
+          const facadeStart = facadeStage ? facadeStage.start : wallsEnd;
+          const facadeEnd = facadeStage ? facadeStage.end : maxDay;
+
+          // Combined Superstructure duration (Columns + Frame + Slabs)
+          const superDuration = floorsEnd - structureStart;
+          const floorSuperDuration = totalFloors > 0 ? superDuration / totalFloors : 0;
+
+          // Walls phase duration
+          const wallsDuration = wallsEnd - wallsStart;
+          const floorWallsDuration = totalFloors > 0 ? wallsDuration / totalFloors : 0;
+
+          // Facade phase duration
+          const facadeDuration = facadeEnd - facadeStart;
+          const floorFacadeDuration = totalFloors > 0 ? facadeDuration / totalFloors : 0;
 
           return uploadedModel.elements.map((el, index) => {
             const floorIndex = Math.max(0, Math.floor((el.position[1] || 0) / 3.0));
 
+            // Classify element type
+            const isFoundation = (el.type === 'slab' && el.position[1] < 1.0) || el.type === 'foundation';
+            const isColumn = el.type === 'column';
+            const isRoofing = el.type === 'slab' && el.position[1] >= 1.0;
+            const isStair = el.type === 'stair' || (el.layer && el.layer.toLowerCase().includes('stair'));
+            const isFrame = (el.layer === 'structure' || el.type === 'core' || el.layer === 'structural') && !isColumn && !isRoofing && !isStair;
+            const isWallPartition = (el.layer === 'walls' || el.type === 'wall') && !isFrame;
+            const isMEP = el.layer === 'mep' || el.type === 'duct' || el.type === 'lift';
+            const isFacade = el.layer === 'facade' || el.type === 'window';
+
             // Phase mapping
             let phaseStart = 0;
-            let phaseEnd = 1;
-
-            let isFoundation = (el.type === 'slab' && el.position[1] < 1.0);
-            let isColumn = (el.type === 'column');
-            let isFrame = (el.layer === 'structure' || el.type === 'core' || el.layer === 'walls' || el.type === 'wall') && el.type !== 'column' && el.type !== 'slab';
-            let isRoofing = (el.type === 'slab' && el.position[1] >= 1.0);
-            let isStair = (el.type === 'stair' || (el.layer && el.layer.toLowerCase().includes('stair')));
-            let isFinishing = (!isStair && (el.layer === 'mep' || el.layer === 'facade' || el.type === 'lift' || el.type === 'duct'));
-
-            const totalFloors = maxFloor + 1;
-            const superstructureStart = 0.10;
-            const superstructureEnd = 0.85;
-            const superstructureDuration = superstructureEnd - superstructureStart;
-            const floorStep = superstructureDuration / totalFloors;
+            let phaseEnd = maxDay || 100;
 
             if (isFoundation) {
-              phaseStart = 0.0;
-              phaseEnd = superstructureStart;
+              phaseStart = foundationStart;
+              phaseEnd = foundationEnd;
             } else if (isColumn) {
-              const floorStart = superstructureStart + floorIndex * floorStep;
-              phaseStart = floorStart;
-              phaseEnd = floorStart + floorStep * 0.35;
+              const floorSuperStart = structureStart + floorIndex * floorSuperDuration;
+              phaseStart = floorSuperStart;
+              phaseEnd = floorSuperStart + floorSuperDuration * 0.35;
             } else if (isFrame) {
-              const floorStart = superstructureStart + floorIndex * floorStep;
-              phaseStart = floorStart + floorStep * 0.35;
-              phaseEnd = floorStart + floorStep * 0.75;
-            } else if (isRoofing) {
-              const floorStart = superstructureStart + floorIndex * floorStep;
-              phaseStart = floorStart + floorStep * 0.75;
-              phaseEnd = floorStart + floorStep;
-            } else if (isFinishing) {
-              phaseStart = superstructureEnd;
-              phaseEnd = 1.0;
+              const floorSuperStart = structureStart + floorIndex * floorSuperDuration;
+              phaseStart = floorSuperStart + floorSuperDuration * 0.35;
+              phaseEnd = floorSuperStart + floorSuperDuration * 0.75;
+            } else if (isRoofing || isStair) {
+              const floorSuperStart = structureStart + floorIndex * floorSuperDuration;
+              phaseStart = floorSuperStart + floorSuperDuration * 0.75;
+              phaseEnd = floorSuperStart + floorSuperDuration;
+            } else if (isWallPartition || isMEP) {
+              phaseStart = wallsStart + floorIndex * floorWallsDuration;
+              phaseEnd = phaseStart + floorWallsDuration;
+            } else if (isFacade) {
+              phaseStart = facadeStart + floorIndex * floorFacadeDuration;
+              phaseEnd = phaseStart + floorFacadeDuration;
+            } else {
+              // Fallback default: map with structural frame
+              const floorSuperStart = structureStart + floorIndex * floorSuperDuration;
+              phaseStart = floorSuperStart + floorSuperDuration * 0.35;
+              phaseEnd = floorSuperStart + floorSuperDuration * 0.75;
             }
 
-            // Calculate element progress
+            // Calculate element progress and visibility
             let elementProgress = 0;
             let isVisible = false;
             let scaleY = 1.0;
 
-            if (isStair) {
-              // STAIRS RENDERING LOGIC
-              // Map the stair progress alongside the main construction phases (superstructureStart - superstructureEnd)
-              const stairPhaseStart = superstructureStart;
-              const stairPhaseEnd = superstructureEnd;
-              const totalFloors = maxFloor + 1;
-              
-              let stairGlobalProgress = 0;
-              if (globalProgress >= stairPhaseEnd) stairGlobalProgress = 1.0;
-              else if (globalProgress > stairPhaseStart) stairGlobalProgress = (globalProgress - stairPhaseStart) / (stairPhaseEnd - stairPhaseStart);
-
-              const totalStairProgress = stairGlobalProgress * totalFloors;
-              const currentStairFloor = Math.floor(totalStairProgress);
-              const floorStairProgress = totalStairProgress - currentStairFloor;
-
-              if (floorIndex < currentStairFloor) {
-                isVisible = true;
-                scaleY = 1.0;
-                elementProgress = 1.0;
-              } else if (floorIndex === currentStairFloor) {
-                // Slab dependency: stairs begin appearing after 50% of the floor's time has passed
-                if (floorStairProgress > 0.5) {
-                  isVisible = true;
-                  scaleY = (floorStairProgress - 0.5) * 2.0; // Scale from 0 to 1
-                  elementProgress = scaleY;
-                } else {
-                  isVisible = false;
-                  scaleY = 0.01;
-                  elementProgress = 0;
-                }
-              } else {
-                isVisible = false;
-                scaleY = 0.01;
-                elementProgress = 0;
-              }
-            } else if (isFoundation) {
-              // Foundation starts fully built at Day 0, providing a stable visual baseline
+            if (currentDay >= phaseEnd) {
               elementProgress = 1.0;
               isVisible = true;
               scaleY = 1.0;
-            } else {
-              // DEFAULT LOGIC
-              if (globalProgress >= 1.0) {
-                elementProgress = 1.0;
-              } else if (globalProgress >= phaseEnd) {
-                elementProgress = 1.0;
-              } else if (globalProgress >= phaseStart) {
-                elementProgress = (globalProgress - phaseStart) / (phaseEnd - phaseStart);
-              }
-
+            } else if (currentDay >= phaseStart) {
+              const phaseDuration = phaseEnd - phaseStart;
+              elementProgress = phaseDuration > 0 ? (currentDay - phaseStart) / phaseDuration : 1.0;
               elementProgress = Math.min(Math.max(elementProgress, 0), 1);
-              isVisible = globalProgress >= phaseStart;
+              isVisible = true;
               scaleY = elementProgress;
+            } else {
+              elementProgress = 0;
+              isVisible = false;
+              scaleY = 0.01;
             }
 
             // Layer visibility checks
