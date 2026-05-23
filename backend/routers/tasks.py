@@ -32,8 +32,17 @@ def upload_plan(
     if not any(file.filename.lower().endswith(ext) for ext in valid_extensions):
         raise HTTPException(status_code=400, detail="Invalid file type. Only .dxf and .ifc permitted.")
     
-    # Save file temporarily to parse it
-    temp_filepath = f"temp_{file.filename}"
+    # Save file temporarily to parse it using safe, relative, and platform-independent paths
+    persistent_path = "/data"
+    if os.path.exists(persistent_path):
+        uploads_dir = os.path.join(persistent_path, "uploads")
+    else:
+        backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        uploads_dir = os.path.join(backend_dir, "uploads")
+        
+    os.makedirs(uploads_dir, exist_ok=True)
+    temp_filepath = os.path.join(uploads_dir, f"temp_{file.filename}")
+
     with open(temp_filepath, "wb") as f:
         f.write(file.file.read())
         

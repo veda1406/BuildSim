@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Pencil, Check, X, RotateCcw, AlertCircle, RefreshCw } from 'lucide-react';
+import { API_URL } from '../../../../config';
 
 interface BudgetForecastCardProps {
   currentCost: number;
@@ -49,7 +50,7 @@ export default function BudgetForecastCard({ currentCost, project, onBudgetUpdat
     try {
       setIsSaving(true);
       setErrorMsg(null);
-      await axios.patch(`http://127.0.0.1:8000/projects/${project.id}/budget`, {
+      await axios.patch(`${API_URL}/projects/${project.id}/budget`, {
         final_budget: parsedBudget,
         is_overridden: true
       });
@@ -67,7 +68,7 @@ export default function BudgetForecastCard({ currentCost, project, onBudgetUpdat
     try {
       setIsSaving(true);
       setErrorMsg(null);
-      await axios.patch(`http://127.0.0.1:8000/projects/${project.id}/budget`, {
+      await axios.patch(`${API_URL}/projects/${project.id}/budget`, {
         final_budget: estimatedBudget,
         is_overridden: false
       });

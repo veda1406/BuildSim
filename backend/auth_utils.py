@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import Depends, HTTPException, status
@@ -9,7 +10,7 @@ import models
 import schemas
 from database import get_db
 
-SECRET_KEY = "supersecret_buildsim_key_for_development"
+SECRET_KEY = os.environ.get("SECRET_KEY", "supersecret_buildsim_key_for_development")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 7 days
 

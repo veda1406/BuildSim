@@ -32,12 +32,21 @@ try:
 finally:
     db.close()
 
+import os
+
 app = FastAPI(title="BuildSim Simulation Engine API")
 
-# CORS setup for the React frontend
+# Dynamic CORS setup allowing local testing and production Vercel frontend domains
+frontend_url = os.environ.get("FRONTEND_URL")
+origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+if frontend_url:
+    origins.append(frontend_url)
+else:
+    origins.append("*")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -52,3 +61,8 @@ app.include_router(tasks.router)
 app.include_router(auth.router)
 app.include_router(project.router)
 app.include_router(projects.router)
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)

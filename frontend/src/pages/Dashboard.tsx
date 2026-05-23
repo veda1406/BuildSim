@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { Upload, Play, Pause, RotateCcw, Layers, LogOut } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { API_URL } from '../config';
 import { useSimulation } from '../context/SimulationContext';
 import type { Task } from '../types';
 
@@ -48,7 +49,7 @@ export default function Dashboard() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-    axios.get('http://127.0.0.1:8000/tasks/', { 
+    axios.get(`${API_URL}/tasks/`, { 
       headers: { Authorization: `Bearer ${token}` },
       signal: controller.signal
     })
@@ -96,7 +97,7 @@ export default function Dashboard() {
       formData.append('num_stories', numStories.toString());
       formData.append('project_id', activeProjectId.toString());
 
-      const response = await axios.post('http://127.0.0.1:8000/tasks/upload', formData, {
+      const response = await axios.post(`${API_URL}/tasks/upload`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
           Authorization: `Bearer ${token}`

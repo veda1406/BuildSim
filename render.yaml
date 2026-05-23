@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: buildsim-backend
+    env: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: SECRET_KEY
+        generateValue: true
+      - key: FRONTEND_URL
+        sync: false
+      - key: SMTP_EMAIL
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+    # Optional persistent storage for SQLite buildsim.db and uploaded files.
+    # Note: Render Persistent Disks require a paid instance type (Starter tier or higher).
+    # Uncomment the disk section below if you wish to use Render Persistent Disks.
+    # disk:
+    #   name: buildsim-storage
+    #   mountPath: /data
+    #   sizeGB: 1

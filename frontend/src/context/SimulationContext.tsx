@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
 import type { Task, ParsedModel, ArchitectState, CivilState } from '../types';
+import { API_URL } from '../config';
 
 interface SimulationContextType {
   tasks: Task[];
@@ -166,7 +167,7 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   useEffect(() => {
     const run = async () => {
       try {
-        const res = await axios.post('http://127.0.0.1:8000/project/simulate-timeline', {
+        const res = await axios.post(`${API_URL}/project/simulate-timeline`, {
           floors: numStories,
           area,
           weather_delay: Math.round(weatherDelay),
@@ -190,7 +191,7 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   useEffect(() => {
     const run = async () => {
       try {
-        const res = await axios.post('http://127.0.0.1:8000/project/calculate-cost', {
+        const res = await axios.post(`${API_URL}/project/calculate-cost`, {
           floors: numStories,
           area
         });
@@ -206,7 +207,7 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   useEffect(() => {
     const run = async () => {
       try {
-        const res = await axios.post('http://127.0.0.1:8000/project/simulate-scenario', {
+        const res = await axios.post(`${API_URL}/project/simulate-scenario`, {
           footprint_area: area,
           number_of_floors: numStories,
           workers,

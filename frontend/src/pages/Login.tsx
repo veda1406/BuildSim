@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Layers } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { API_URL } from '../config';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -17,7 +18,7 @@ export default function Login() {
       formData.append('username', email);
       formData.append('password', password);
 
-      const res = await fetch('http://127.0.0.1:8000/auth/login', {
+      const res = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -31,7 +32,7 @@ export default function Login() {
 
       const data = await res.json();
       
-      const userRes = await fetch('http://127.0.0.1:8000/auth/me', {
+      const userRes = await fetch(`${API_URL}/auth/me`, {
         headers: { Authorization: `Bearer ${data.access_token}` },
       });
       const userData = await userRes.json();
